@@ -50,6 +50,11 @@ jobs:
           from mind.prompts import get_default_config_path, load_agent_configs
 
           async def run_conversation():
+              # 调试：检查环境变量
+              api_key = os.getenv("ANTHROPIC_API_KEY")
+              print(f"🔑 API Key 长度: {len(api_key) if api_key else 0}")
+              print(f"🔑 API Key 前缀: {api_key[:7]}...{api_key[-4:] if api_key else 'None'}")
+
               # 配置
               MAX_TURNS = 500
               issue_title = os.getenv("ISSUE_TITLE")
