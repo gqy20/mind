@@ -20,6 +20,7 @@ class TokenConfig:
     warning_threshold: int = 120_000  # 警告：开始准备清理
     target_after_trim: int = 80_000  # 清理后目标：留出增长空间
     min_keep_recent: int = 10  # 最少保留最近轮数
+    max_trim_count: int = 3  # 最大清理次数，达到后自动退出并总结
 
 
 class MemoryManager:

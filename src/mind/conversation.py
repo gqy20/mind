@@ -58,6 +58,10 @@ class ConversationManager:
     topic: str = ""
     # 对话开始时间（使用 None 作为默认值，在 start 时设置）
     start_time: datetime | None = None
+    # 清理计数器
+    _trim_count: int = 0
+    # 对话总结
+    summary: str = ""
 
     def save_conversation(self) -> Path:
         """保存对话到 JSON 文件
@@ -82,6 +86,8 @@ class ConversationManager:
             "turn_count": self.turn,
             "agent_a": self.agent_a.name,
             "agent_b": self.agent_b.name,
+            "trim_count": self._trim_count,
+            "summary": self.summary,
             "messages": [
                 {"role": msg["role"], "content": msg["content"]}
                 for msg in self.messages
@@ -94,6 +100,54 @@ class ConversationManager:
 
         logger.info(f"对话已保存到: {filepath}")
         return filepath
+
+    def should_exit_after_trim(self) -> bool:
+        """判断是否应该在清理后退出
+
+        Returns:
+            是否应该退出
+        """
+        return self._trim_count >= self.memory.config.max_trim_count
+
+    async def _summarize_conversation(self) -> str:
+        """生成对话总结
+
+        使用当前智能体对整体对话进行总结。
+
+        Returns:
+            对话总结文本
+        """
+        # 构建总结提示词
+        summary_prompt = f"""请对以下对话进行总结，包括：
+
+主题：{self.topic}
+
+对话内容：
+{chr(10).join(f"- {msg['role']}: {msg['content'][:100]}..." for msg in self.messages[-20:])}
+
+请提供：
+1. 核心观点总结（支持者的主要论点）
+2. 反对观点总结（挑战者的主要论点）
+3. 关键共识点
+4. 主要分歧点
+
+请用简洁的语言总结，不超过 300 字。"""
+
+        # 使用 agent_a 生成总结
+        messages_for_summary: list[MessageParam] = [
+            {"role": "user", "content": summary_prompt}
+        ]
+
+        try:
+            response = await self.agent_a.respond(
+                messages_for_summary, asyncio.Event()
+            )
+            summary = response or "对话总结生成失败"
+            logger.info(f"对话总结已生成: {len(summary)} 字")
+            return summary
+        except Exception as e:
+            logger.error(f"生成对话总结失败: {e}")
+            return "对话总结生成失败"
 
     def _show_token_progress(self):
         """显示 token 使用进度条"""
@@ -240,11 +294,34 @@ class ConversationManager:
             # 检查记忆状态并在必要时清理
             status = self.memory.get_status()
             if status == "red":
-                logger.warning(f"Token 超限，开始清理对话历史...")
+                self._trim_count += 1
+                logger.warning(f"Token 超限 (第 {self._trim_count} 次)，开始清理对话历史...")
                 old_count = len(self.messages)
                 self.messages = self.memory.trim_messages(self.messages)
                 new_count = len(self.messages)
                 logger.info(f"清理完成: {old_count} → {new_count} 条消息, {self.memory._total_tokens} tokens")
+
+                # 检查是否需要自动退出
+                if self.should_exit_after_trim():
+                    print(f"\n{'=' * 60}")
+                    print(f"⚠️  已达到最大清理次数 ({self.memory.config.max_trim_count} 次)")
+                    print(f"正在生成对话总结...")
+                    print(f"{'=' * 60}\n")
+
+                    # 生成总结
+                    self.summary = await self._summarize_conversation()
+
+                    print(f"\n{'=' * 60}")
+                    print(f"📝 对话总结")
+                    print(f"{'=' * 60}")
+                    print(f"{self.summary}\n")
+                    print(f"{'=' * 60}")
+                    print(f"💾 对话已保存（包含总结）")
+                    print(f"{'=' * 60}\n")
+
+                    # 标记退出
+                    self.is_running = False
+                    logger.info("达到最大清理次数，对话自动结束")
         else:
             logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应被中断")
 
