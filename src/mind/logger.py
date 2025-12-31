@@ -87,14 +87,21 @@ def setup_logger(
     # 初始化该 logger 的 handler ID 列表（只记录文件处理器）
     _handler_ids[name] = []
 
-    # 添加全局控制台处理器（只添加一次，且仅当 console_output=True 时）
-    if console_output and _global_console_handler_id is None:
-        _global_console_handler_id = _logger.add(
-            sink=lambda msg: print(msg, end=""),
-            format=format_string,
-            level=level,
-            colorize=True,
-        )
+    # 第一次调用时，移除 loguru 的默认处理器（它输出到 stderr）
+    if _global_console_handler_id is None:
+        _logger.remove()  # 移除所有默认处理器
+        _global_console_handler_id = -1  # 标记已初始化（-1 表示没有控制台处理器）
+
+    # 添加全局控制台处理器（仅当 console_output=True 时）
+    if console_output:
+        if _global_console_handler_id == -1:
+            # 还没有控制台处理器，添加一个
+            _global_console_handler_id = _logger.add(
+                sink=lambda msg: print(msg, end=""),
+                format=format_string,
+                level=level,
+                colorize=True,
+            )
 
     # 添加文件处理器
     if log_to_file:
