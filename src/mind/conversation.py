@@ -9,6 +9,7 @@
 """
 
 import asyncio
+import re
 import select
 import sys
 from dataclasses import dataclass, field
@@ -122,10 +123,19 @@ class ConversationManager:
         # 如果未被中断，记录响应
         if response is not None:
             # 添加角色名前缀，使 AI 能区分不同智能体
-            # 防御性去重：如果响应已包含前缀，先移除
-            prefix = f"[{current_agent.name}]:"
-            if response.startswith(prefix):
-                response = response[len(prefix):].lstrip()
+            # 防御性去重：移除各种可能的前缀格式
+            # 匹配: [角色名]:, [角色名]：, **角色名：**, 角色名：, 等
+            patterns_to_remove = [
+                rf"^\[{re.escape(current_agent.name)}\]:\s*",
+                rf"^\[{re.escape(current_agent.name)}]\uFF1A\s*",  # 中文冒号
+                rf"^\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",  # 加粗+中文冒号
+                rf"^\*\*{re.escape(current_agent.name)}:\*\*\s*",  # 加粗+英文冒号
+                rf"^{re.escape(current_agent.name)}\uFF1A\s*",  # 纯角色名+中文冒号
+                rf"^\[{re.escape(current_agent.name)}\]\s*\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",  # 组合格式
+            ]
+            for pattern in patterns_to_remove:
+                response = re.sub(pattern, "", response, count=1).lstrip()
+
             formatted_content = f"[{current_agent.name}]: {response}"
             msg = {"role": "assistant", "content": formatted_content}
             self.messages.append(msg)
