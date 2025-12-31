@@ -121,7 +121,9 @@ class ConversationManager:
 
         # 如果未被中断，记录响应
         if response is not None:
-            msg = {"role": "assistant", "content": response}
+            # 添加角色名前缀，使 AI 能区分不同智能体
+            formatted_content = f"[{current_agent.name}]: {response}"
+            msg = {"role": "assistant", "content": formatted_content}
             self.messages.append(msg)
             # 使用记忆管理器记录消息
             self.memory.add_message(msg["role"], msg["content"])
