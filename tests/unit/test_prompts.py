@@ -14,7 +14,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from mind.prompts import AgentConfig, load_agent_configs
+from mind.prompts import AgentConfig, ConfigError, load_agent_configs
 
 
 class TestLoadAgentConfigs:
@@ -69,7 +69,7 @@ class TestLoadAgentConfigs:
             load_agent_configs(str(config_file))
 
     def test_load_agent_configs_missing_agents_key(self, tmp_path):
-        """测试：缺少 agents 键应抛出 ValidationError"""
+        """测试：缺少 agents 键应抛出 ConfigError"""
         # Arrange
         config_content = {"invalid_key": {}}
         config_file = tmp_path / "prompts.yaml"
@@ -77,7 +77,7 @@ class TestLoadAgentConfigs:
             yaml.dump(config_content, f)
 
         # Act & Assert
-        with pytest.raises(ValidationError):
+        with pytest.raises(ConfigError):
             load_agent_configs(str(config_file))
 
     def test_load_agent_configs_empty_agents(self, tmp_path):
