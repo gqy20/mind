@@ -3,6 +3,12 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def set_test_api_key(monkeypatch):
+    """为所有测试设置模拟的 API key 环境变量"""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-api-key-for-testing")
+
+
 @pytest.fixture
 def sample_data():
     """提供测试用的示例数据。"""
