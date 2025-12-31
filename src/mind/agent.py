@@ -10,7 +10,10 @@ from anthropic import APIStatusError, AsyncAnthropic
 from anthropic.types import MessageParam
 from rich.console import Console
 
+from mind.logger import get_logger
+
 console = Console()
+logger = get_logger("mind.agent")
 
 # 默认模型配置
 DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
@@ -41,6 +44,7 @@ class Agent:
         self.system_prompt = system_prompt
         self.model = model or DEFAULT_MODEL
         self.client = AsyncAnthropic()
+        logger.info(f"智能体初始化: {self.name}, 模型: {self.model}")
 
     async def respond(
         self, messages: list[MessageParam], interrupt: asyncio.Event
@@ -56,9 +60,11 @@ class Agent:
         """
         # 如果立即被中断，直接返回 None
         if interrupt.is_set():
+            logger.debug(f"智能体 {self.name} 响应被中断")
             return None
 
         response_text = ""
+        logger.debug(f"智能体 {self.name} 开始响应，历史消息数: {len(messages)}")
 
         try:
             async with self.client.messages.stream(
@@ -70,6 +76,7 @@ class Agent:
                 async for event in stream:
                     # 检查中断
                     if interrupt.is_set():
+                        logger.debug(f"智能体 {self.name} 响应中途被中断")
                         return None
 
                     if event.type == "text":
@@ -83,6 +90,7 @@ class Agent:
             # API 状态错误（401, 429, 500 等）
             status_code = e.response.status_code if hasattr(e, "response") else "未知"
             error_msg = str(e)
+            logger.error(f"API 状态错误: {status_code}, 消息: {error_msg}")
 
             if status_code == 401:
                 console.print("\n[red]❌ 认证失败：API Key 无效或已过期[/red]")
@@ -97,15 +105,19 @@ class Agent:
             return None
 
         except TimeoutError:
+            logger.error(f"请求超时: {self.name}")
             console.print("\n[red]❌ 请求超时：网络连接超时，请检查网络设置[/red]")
             return None
 
         except OSError as e:
+            logger.error(f"网络错误: {self.name}, 错误: {e}")
             console.print(f"\n[red]❌ 网络错误：{e}[/red]")
             return None
 
         except Exception as e:
+            logger.exception(f"未知错误: {self.name}, 错误: {e}")
             console.print(f"\n[red]❌ 未知错误：{e}[/red]")
             return None
 
+        logger.debug(f"智能体 {self.name} 响应完成，长度: {len(response_text)}")
         return response_text

@@ -14,6 +14,9 @@ import os
 
 from mind.agent import DEFAULT_MODEL, Agent
 from mind.conversation import ConversationManager
+from mind.logger import get_logger
+
+logger = get_logger("mind.cli")
 
 
 def check_config() -> bool:
@@ -32,15 +35,19 @@ def check_config() -> bool:
     print()
 
     if not api_key:
+        logger.error("ANTHROPIC_API_KEY 未设置")
         print("❌ 错误: 请设置 ANTHROPIC_API_KEY 环境变量")
         print("   示例: export ANTHROPIC_API_KEY='your-key-here'")
         return False
 
+    logger.info(f"配置检查通过: Base URL={base_url or '默认'}, 模型={DEFAULT_MODEL}")
     return True
 
 
 async def main():
     """主函数 - 配置并启动双智能体对话"""
+
+    logger.info("=" * 20 + " 程序启动 " + "=" * 20)
 
     # 检查配置
     if not check_config():
@@ -65,6 +72,8 @@ async def main():
 4. 回复简洁，不超过 100 字""",
     )
 
+    logger.info("双智能体创建完成: 支持者 vs 挑战者")
+
     # 创建对话管理器
     manager = ConversationManager(
         agent_a=supporter,
@@ -87,15 +96,19 @@ async def main():
         topic = "人工智能是否应该拥有法律人格？"
         print(f"使用默认主题: {topic}")
 
+    logger.info(f"用户选择主题: {topic}")
+
     print(f"\n{'=' * 60}")
     print(f"🎯 对话主题: {topic}")
     print(f"{'=' * 60}\n")
 
     await manager.start(topic)
+    logger.info("程序正常退出")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
+        logger.info("用户通过 Ctrl+C 中断程序")
         print("\n\n👋 对话已结束")

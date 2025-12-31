@@ -160,6 +160,10 @@ class TestLogOutput:
         logger.warning("警告消息")
         logger.error("错误消息")
 
+        # 等待日志文件写入完成（loguru 使用异步写入）
+        import time
+        time.sleep(0.2)
+
         # Assert - 检查日志文件包含所有消息
         content = log_file.read_text()
         # 由于 loguru 格式，检查关键词（分别检查）

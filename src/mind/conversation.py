@@ -16,6 +16,9 @@ from dataclasses import dataclass, field
 from anthropic.types import MessageParam
 
 from mind.agent import Agent
+from mind.logger import get_logger
+
+logger = get_logger("mind.conversation")
 
 
 def _is_input_ready():
@@ -50,6 +53,7 @@ class ConversationManager:
                 "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
             }
         )
+        logger.info(f"对话开始，主题: {topic}")
 
         print("\n💡 提示: 按 Enter 打断对话并输入消息，Ctrl+C 退出\n")
 
@@ -68,12 +72,14 @@ class ConversationManager:
                 await self._turn()
                 await asyncio.sleep(self.turn_interval)
         except KeyboardInterrupt:
+            logger.info("对话被用户中断")
             print("\n\n👋 对话已结束")
 
     async def _input_mode(self):
         """输入模式 - 等待用户输入"""
         # 设置中断标志，停止 AI 输出
         self.interrupt.set()
+        logger.debug("进入用户输入模式")
         print("\n" + "=" * 50)
         print("📝 输入模式 (直接回车取消)")
         print("=" * 50)
@@ -93,6 +99,7 @@ class ConversationManager:
         if user_input.strip():
             await self._handle_user_input(user_input)
         else:
+            logger.debug("用户取消输入")
             print("❌ 取消输入，继续对话...\n")
 
     async def _turn(self):
@@ -112,6 +119,9 @@ class ConversationManager:
         if response is not None:
             self.messages.append({"role": "assistant", "content": response})
             self.turn += 1
+            logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应完成")
+        else:
+            logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应被中断")
 
         # 切换到下一个智能体
         self.current = 1 - self.current
@@ -125,13 +135,16 @@ class ConversationManager:
         # 分析用户意图
         if user_input.strip().lower() in ["/quit", "/exit", "退出"]:
             self.is_running = False
+            logger.info("用户请求退出对话")
             print("对话结束")
         elif user_input.strip().lower() == "/clear":
             # 清空对话，保留主题
             self.messages = self.messages[:1]
             self.turn = 0
+            logger.info("用户重置对话历史")
             print("✅ 对话已重置\n")
         else:
             # 其他输入作为正常对话继续
             self.messages.append({"role": "user", "content": user_input})
+            logger.info(f"用户输入消息: {user_input[:50]}...")
             print("✅ 已发送，继续对话...\n")
