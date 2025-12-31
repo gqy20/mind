@@ -43,7 +43,11 @@ class Agent:
         self.name = name
         self.system_prompt = system_prompt
         self.model = model or DEFAULT_MODEL
-        self.client = AsyncAnthropic()
+        # 显式读取 API key 并传递给客户端
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY 环境变量未设置")
+        self.client = AsyncAnthropic(api_key=api_key)
         logger.info(f"智能体初始化: {self.name}, 模型: {self.model}")
 
     async def respond(
