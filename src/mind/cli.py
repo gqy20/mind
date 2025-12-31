@@ -2,13 +2,16 @@
 Mind - AI agents that collaborate to spark innovation
 
 使用方式:
-    python -m mind.cli
+    python -m mind.cli                    # 交互式输入主题
+    python -m mind.cli "主题内容"         # 直接指定主题
+    python -m mind.cli --max-turns 10     # 限制对话轮数
 
 命令:
     /quit, /exit - 退出对话
     /clear - 重置对话历史
 """
 
+import argparse
 import asyncio
 import os
 
@@ -45,8 +48,48 @@ def check_config() -> bool:
     return True
 
 
+def parse_args() -> argparse.Namespace:
+    """解析命令行参数
+
+    Returns:
+        解析后的参数
+    """
+    parser = argparse.ArgumentParser(
+        description="Mind - AI Agents for Innovation",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "topic",
+        nargs="?",
+        help="对话主题（不指定则交互式输入）",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=None,
+        help="最大对话轮数（用于非交互式模式）",
+    )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="非交互式模式（自动运行对话）",
+    )
+    # 使用 parse_known_args 忽略未知参数（如 pytest 的 -v）
+    args, _ = parser.parse_known_args()
+
+    # 如果 topic 是 .py 文件路径（可能是测试时误解析），则清空
+    if args.topic and (
+        args.topic.endswith(".py") or "/" in args.topic or "\\" in args.topic
+    ):
+        args.topic = None
+
+    return args
+
+
 async def main():
     """主函数 - 配置并启动双智能体对话"""
+
+    args = parse_args()
 
     logger.info("=" * 20 + " 程序启动 " + "=" * 20)
 
@@ -80,20 +123,22 @@ async def main():
         turn_interval=1.0,
     )
 
-    # 获取主题并开始
-    print("=" * 60)
-    print("🧠 Mind - AI Agents for Innovation")
-    print("=" * 60)
-    print("\n命令:")
-    print("  /quit 或 /exit - 退出对话")
-    print("  /clear - 重置对话")
-    print("\n")
-
-    topic = input("请输入对话主题: ").strip()
-
+    # 获取主题
+    topic = args.topic
     if not topic:
-        topic = "人工智能是否应该拥有法律人格？"
-        print(f"使用默认主题: {topic}")
+        print("=" * 60)
+        print("🧠 Mind - AI Agents for Innovation")
+        print("=" * 60)
+        print("\n命令:")
+        print("  /quit 或 /exit - 退出对话")
+        print("  /clear - 重置对话")
+        print("\n")
+
+        topic = input("请输入对话主题: ").strip()
+
+        if not topic:
+            topic = "人工智能是否应该拥有法律人格？"
+            print(f"使用默认主题: {topic}")
 
     logger.info(f"用户选择主题: {topic}")
 
@@ -101,6 +146,15 @@ async def main():
     print(f"🎯 对话主题: {topic}")
     print(f"{'=' * 60}\n")
 
+    # 非交互式模式
+    if args.non_interactive or args.max_turns:
+        max_turns = args.max_turns or 500
+        result = await manager.run_auto(topic, max_turns=max_turns)
+        print(result)
+        logger.info("程序正常退出")
+        return
+
+    # 交互式模式
     await manager.start(topic)
     logger.info("程序正常退出")
 

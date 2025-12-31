@@ -229,6 +229,124 @@ class ConversationManager:
             filepath = self.save_conversation()
             print(f"📁 对话已保存到: {filepath}")
 
+    async def run_auto(self, topic: str, max_turns: int = 500) -> str:
+        """非交互式自动运行对话
+
+        Args:
+            topic: 对话主题
+            max_turns: 最大对话轮数
+
+        Returns:
+            对话输出文本
+        """
+        # 保存主题和开始时间
+        self.topic = topic
+        self.start_time = datetime.now()
+
+        # 初始化主题
+        topic_msg = cast(
+            MessageParam,
+            {
+                "role": "user",
+                "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
+            },
+        )
+        self.messages.append(topic_msg)
+        self.memory.add_message(topic_msg["role"], cast(str, topic_msg["content"]))
+        logger.info(f"非交互式对话开始，主题: {topic}")
+
+        # 收集输出
+        output = []
+        output.append(f"🎯 **对话主题**: {topic}")
+        output.append("")
+        output.append("---")
+        output.append("")
+
+        # 主对话循环
+        for _ in range(max_turns):
+            if not self.is_running:
+                break
+
+            current_agent = self.agent_a if self.current == 0 else self.agent_b
+
+            output.append(f"### [{current_agent.name}]")
+            response = await current_agent.respond(self.messages, self.interrupt)
+
+            if response is not None:
+                # 移除可能的前缀
+                patterns_to_remove = [
+                    rf"^\[{re.escape(current_agent.name)}\]:\s*",
+                    rf"^\[{re.escape(current_agent.name)}]\uFF1A\s*",
+                    rf"^\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",
+                    rf"^\*\*{re.escape(current_agent.name)}:\*\*\s*",
+                    rf"^{re.escape(current_agent.name)}\uFF1A\s*",
+                    rf"^\[{re.escape(current_agent.name)}\]\s*\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",
+                ]
+                for pattern in patterns_to_remove:
+                    response = re.sub(pattern, "", response, count=1).lstrip()
+
+                output.append(response)
+                output.append("")
+
+                formatted_content = f"[{current_agent.name}]: {response}"
+                msg = cast(
+                    MessageParam,
+                    {"role": "assistant", "content": formatted_content},
+                )
+                self.messages.append(msg)
+                self.memory.add_message(msg["role"], cast(str, msg["content"]))
+                self.turn += 1
+                logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应完成")
+
+                # 检查记忆状态并在必要时清理
+                status = self.memory.get_status()
+                if status == "red":
+                    self._trim_count += 1
+                    logger.warning(
+                        f"Token 超限 (第 {self._trim_count} 次)，开始清理对话历史..."
+                    )
+                    old_count = len(self.messages)
+                    self.messages = cast(
+                        list[MessageParam],
+                        self.memory.trim_messages(cast(list[dict], self.messages)),
+                    )
+                    new_count = len(self.messages)
+                    logger.info(
+                        f"清理完成: {old_count} → {new_count} 条消息, "
+                        f"{self.memory._total_tokens} tokens"
+                    )
+
+                    # 检查是否需要自动退出
+                    if self.should_exit_after_trim():
+                        self.summary = await self._summarize_conversation()
+                        output.append("")
+                        output.append("---")
+                        output.append("")
+                        output.append("⚠️ 对话结束（上下文超限）")
+                        output.append("")
+                        output.append("📝 **对话总结**")
+                        output.append(self.summary)
+                        break
+            else:
+                logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应被中断")
+
+            # 切换到下一个智能体
+            self.current = 1 - self.current
+
+        # 添加统计和结尾
+        output.append("")
+        output.append("---")
+        output.append("")
+        output.append(
+            f"📊 **统计**: {self.turn} 轮对话, {self.memory._total_tokens} tokens"
+        )
+
+        # 保存对话到文件
+        self.save_conversation()
+        logger.info("非交互式对话完成")
+
+        return "\n".join(output)
+
     async def _input_mode(self):
         """输入模式 - 等待用户输入"""
         # 设置中断标志，停止 AI 输出
