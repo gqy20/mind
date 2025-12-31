@@ -232,8 +232,10 @@ class ConversationManager:
             if self.turn % 3 == 0:
                 logger.info(f"Token 使用: {self.memory._total_tokens}/{self.memory.config.max_context} ({self.memory._total_tokens / self.memory.config.max_context:.1%})")
 
-            # 显示 token 进度条
+            # 显示 token 进度条（前后各空一行）
+            print()  # 对话内容和进度条之间的空行
             self._show_token_progress()
+            print()  # 进度条后的空行
 
             # 检查记忆状态并在必要时清理
             status = self.memory.get_status()
