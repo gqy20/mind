@@ -31,8 +31,8 @@ jobs:
 
       - name: Create virtual environment and install dependencies
         run: |
-          uv venv
-          uv pip install -e ".[dev]"
+          uv venv .venv
+          uv sync --extra dev
 
       - name: Run ruff check
         run: uv run ruff check .
