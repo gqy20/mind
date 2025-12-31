@@ -39,6 +39,9 @@ dev = [
 Homepage = "https://github.com/gqy20/mind"
 Repository = "https://github.com/gqy20/mind.git"
 
+[project.scripts]
+mind = "mind.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/mind"]
 
