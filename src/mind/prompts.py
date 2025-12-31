@@ -22,6 +22,15 @@ class ConfigError(ValueError):
     pass
 
 
+def get_default_config_path() -> Path:
+    """获取默认配置文件路径
+
+    Returns:
+        默认配置文件的完整路径
+    """
+    return Path(__file__).parent / "prompts.yaml"
+
+
 def load_agent_configs(config_path: str) -> dict[str, AgentConfig]:
     """从 YAML 文件加载智能体配置
 
