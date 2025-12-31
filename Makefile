@@ -1,4 +1,4 @@
-.PHONY: install check format test clean all help
+.PHONY: install check format test test-cov type clean run all help
 
 install:
 	uv pip install -e ".[dev]"
@@ -10,24 +10,32 @@ format:
 	ruff format .
 
 test:
-	pytest
+	uv run pytest
 
 test-cov:
-	pytest --cov=src/mind
+	uv run pytest --cov=src/mind --cov-report=term-missing
+
+type:
+	uv run mypy src/mind/
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf .coverage htmlcov/ dist/ build/ *.egg-info
+	rm -rf .coverage htmlcov/ dist/ build/ *.egg-info .ruff_cache .mypy_cache
 
-all: check test
+run:
+	uv run mind
+
+all: check type test
 
 help:
 	@echo "常用命令:"
 	@echo "  make install   - 安装依赖"
-	@echo "  make check     - 代码检查"
+	@echo "  make check     - 代码检查 (ruff)"
 	@echo "  make format    - 格式化代码"
 	@echo "  make test      - 运行测试"
 	@echo "  make test-cov  - 测试 + 覆盖率"
+	@echo "  make type      - 类型检查 (mypy)"
+	@echo "  make run       - 运行程序"
 	@echo "  make clean     - 清理缓存"
-	@echo "  make all       - 检查 + 测试"
+	@echo "  make all       - 检查 + 类型检查 + 测试"
