@@ -28,7 +28,9 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: uv pip install -e ".[dev]"
+        run: |
+          uv venv .venv
+          uv sync --extra dev
 
       - name: Run conversation and post comment
         env:
