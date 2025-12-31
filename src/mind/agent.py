@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 
 from anthropic import AsyncAnthropic
-from anthropic.types.beta import BetaMessageParam
+from anthropic.types import MessageParam
 
 # 默认模型配置
 DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
@@ -40,7 +40,7 @@ class Agent:
         self.client = AsyncAnthropic()
 
     async def respond(
-        self, messages: list[BetaMessageParam], interrupt: asyncio.Event
+        self, messages: list[MessageParam], interrupt: asyncio.Event
     ) -> str | None:
         """流式响应，支持中断
 

@@ -13,7 +13,7 @@ import select
 import sys
 from dataclasses import dataclass, field
 
-from anthropic.types.beta import BetaMessageParam
+from anthropic.types import MessageParam
 
 from mind.agent import Agent
 
@@ -29,7 +29,7 @@ class ConversationManager:
 
     agent_a: Agent
     agent_b: Agent
-    messages: list[BetaMessageParam] = field(default_factory=list)
+    messages: list[MessageParam] = field(default_factory=list)
     interrupt: asyncio.Event = field(default_factory=asyncio.Event)
     user_wants_to_input: bool = False
     turn: int = 0
