@@ -311,7 +311,7 @@ class TestTrimMessages:
         """测试：清理时应保留最近的消息"""
         # Arrange
         manager = MemoryManager(TokenConfig(
-            max_context=30_000,  # 较小值便于测试
+            max_context=20_000,  # 较小值便于测试，确保会触发清理
             target_after_trim=10_000,
             min_keep_recent=2,
         ))
@@ -320,10 +320,12 @@ class TestTrimMessages:
         messages = []
         for i in range(5):
             content = "M" * 20_000  # ~5000 tokens
-            messages.append({"role": "user", "content": f"Message {i}: {content}"})
-            manager._message_tokens.append(5000)
+            msg = {"role": "user", "content": f"Message {i}: {content}"}
+            messages.append(msg)
+            # 使用 add_message 来正确更新状态
+            manager.add_message(msg["role"], msg["content"])
 
-        manager._total_tokens = 25_000  # 超过 max_context
+        # 现在总 tokens 应该是 5 * 5000 = 25000，超过 max_context (20000)
 
         # Act
         result = manager.trim_messages(messages)
@@ -337,7 +339,7 @@ class TestTrimMessages:
         """测试：清理时应遵守最少保留轮数"""
         # Arrange
         manager = MemoryManager(TokenConfig(
-            max_context=15_000,
+            max_context=10_000,  # 确保触发清理
             target_after_trim=5_000,
             min_keep_recent=3,
         ))
@@ -346,10 +348,11 @@ class TestTrimMessages:
         messages = []
         for i in range(10):
             content = "M" * 12_000  # ~3000 tokens
-            messages.append({"role": "user", "content": f"Message {i}: {content}"})
-            manager._message_tokens.append(3000)
+            msg = {"role": "user", "content": f"Message {i}: {content}"}
+            messages.append(msg)
+            manager.add_message(msg["role"], msg["content"])
 
-        manager._total_tokens = 30_000  # 远超 max_context
+        # 总 tokens 应该是 10 * 3000 = 30000，远超 max_context (10000)
 
         # Act
         result = manager.trim_messages(messages)
@@ -361,7 +364,7 @@ class TestTrimMessages:
         """测试：清理后应更新 token 计数"""
         # Arrange
         manager = MemoryManager(TokenConfig(
-            max_context=15_000,
+            max_context=10_000,  # 确保触发清理
             target_after_trim=5_000,
             min_keep_recent=2,
         ))
@@ -369,18 +372,20 @@ class TestTrimMessages:
         messages = []
         for i in range(5):
             content = "M" * 12_000  # ~3000 tokens
-            messages.append({"role": "user", "content": f"Message {i}: {content}"})
-            manager._message_tokens.append(3000)
+            msg = {"role": "user", "content": f"Message {i}: {content}"}
+            messages.append(msg)
+            manager.add_message(msg["role"], msg["content"])
 
-        initial_total = 15_000
-        manager._total_tokens = initial_total
+        initial_total = manager._total_tokens  # 5 * 3000 = 15000
 
         # Act
         _ = manager.trim_messages(messages)
 
         # Assert
         assert manager._total_tokens < initial_total
-        assert manager._total_tokens <= manager.config.target_after_trim + 3000 * manager.config.min_keep_recent
+        # 清理后的 tokens 应该接近 target + min_keep 的 tokens
+        expected_max = manager.config.target_after_trim + 3000 * manager.config.min_keep_recent
+        assert manager._total_tokens <= expected_max
 
 
 class TestEdgeCases:
@@ -402,8 +407,7 @@ class TestEdgeCases:
         # Arrange
         manager = MemoryManager()
         messages = [{"role": "user", "content": "Hello"}]
-        manager._message_tokens = [5]
-        manager._total_tokens = 5
+        manager.add_message("user", "Hello")
 
         # Act
         result = manager.trim_messages(messages)
@@ -422,15 +426,13 @@ class TestEdgeCases:
 
         # 创建总 token 数小于 target 的消息
         messages = []
-        total = 0
         for i in range(5):
             content = "M" * 1000  # ~250 tokens
-            messages.append({"role": "user", "content": f"Message {i}: {content}"})
-            tokens = 250
-            manager._message_tokens.append(tokens)
-            total += tokens
+            msg = {"role": "user", "content": f"Message {i}: {content}"}
+            messages.append(msg)
+            manager.add_message(msg["role"], msg["content"])
 
-        manager._total_tokens = total  # 1250 tokens，远小于 target
+        # 总 tokens 应该是 5 * 250 = 1250，远小于 target
 
         # Act
         result = manager.trim_messages(messages)
