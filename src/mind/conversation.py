@@ -17,6 +17,7 @@ from anthropic.types import MessageParam
 
 from mind.agent import Agent
 from mind.logger import get_logger
+from mind.memory import MemoryManager, TokenConfig
 
 logger = get_logger("mind.conversation")
 
@@ -39,6 +40,8 @@ class ConversationManager:
     current: int = 0  # 0=A, 1=B
     turn_interval: float = 0.3
     is_running: bool = True
+    # 记忆管理器
+    memory: MemoryManager = field(default_factory=lambda: MemoryManager())
 
     async def start(self, topic: str):
         """开始对话
@@ -47,12 +50,13 @@ class ConversationManager:
             topic: 对话主题
         """
         # 初始化主题
-        self.messages.append(
-            {
-                "role": "user",
-                "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
-            }
-        )
+        topic_msg = {
+            "role": "user",
+            "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
+        }
+        self.messages.append(topic_msg)
+        # 使用记忆管理器记录主题消息
+        self.memory.add_message(topic_msg["role"], topic_msg["content"])
         logger.info(f"对话开始，主题: {topic}")
 
         print("\n💡 提示: 按 Enter 打断对话并输入消息，Ctrl+C 退出\n")
@@ -117,9 +121,23 @@ class ConversationManager:
 
         # 如果未被中断，记录响应
         if response is not None:
-            self.messages.append({"role": "assistant", "content": response})
+            msg = {"role": "assistant", "content": response}
+            self.messages.append(msg)
+            # 使用记忆管理器记录消息
+            self.memory.add_message(msg["role"], msg["content"])
             self.turn += 1
             logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应完成")
+
+            # 检查记忆状态并在必要时清理
+            status = self.memory.get_status()
+            if status == "yellow":
+                logger.warning(f"Token 使用: {self.memory._total_tokens}/{self.memory.config.max_context}")
+            elif status == "red":
+                logger.warning(f"Token 超限，开始清理对话历史...")
+                old_count = len(self.messages)
+                self.messages = self.memory.trim_messages(self.messages)
+                new_count = len(self.messages)
+                logger.info(f"清理完成: {old_count} → {new_count} 条消息, {self.memory._total_tokens} tokens")
         else:
             logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应被中断")
 
@@ -140,11 +158,18 @@ class ConversationManager:
         elif user_input.strip().lower() == "/clear":
             # 清空对话，保留主题
             self.messages = self.messages[:1]
+            # 重置记忆管理器
+            self.memory = MemoryManager()
+            topic_msg = self.messages[0]
+            self.memory.add_message(topic_msg["role"], topic_msg["content"])
             self.turn = 0
             logger.info("用户重置对话历史")
             print("✅ 对话已重置\n")
         else:
             # 其他输入作为正常对话继续
-            self.messages.append({"role": "user", "content": user_input})
+            msg = {"role": "user", "content": user_input}
+            self.messages.append(msg)
+            # 使用记忆管理器记录消息
+            self.memory.add_message(msg["role"], msg["content"])
             logger.info(f"用户输入消息: {user_input[:50]}...")
             print("✅ 已发送，继续对话...\n")
