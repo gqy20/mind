@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from mind.cli import check_config, main
+from mind.prompts import get_default_config_path, load_agent_configs
 
 
 class TestCheckConfig:
@@ -124,3 +125,30 @@ class TestMain:
         call_args = mock_manager_instance.start.call_args
         topic = call_args[0][0] if call_args[0] else call_args[1].get("topic", "")
         assert "人工智能是否应该拥有法律人格" in topic
+
+
+class TestPromptsConfig:
+    """测试提示词配置加载"""
+
+    def test_get_default_config_path(self):
+        """测试：默认配置文件路径应正确"""
+        # Arrange & Act
+        path = get_default_config_path()
+
+        # Assert
+        assert path.name == "prompts.yaml"
+        assert "mind" in path.parts
+
+    def test_load_default_config_succeeds(self):
+        """测试：应能从默认路径加载配置"""
+        # Arrange & Act
+        config_path = str(get_default_config_path())
+        configs = load_agent_configs(config_path)
+
+        # Assert
+        assert "supporter" in configs
+        assert "challenger" in configs
+        assert configs["supporter"].name == "支持者"
+        assert configs["challenger"].name == "挑战者"
+        assert "观点支持者" in configs["supporter"].system_prompt
+        assert "观点挑战者" in configs["challenger"].system_prompt

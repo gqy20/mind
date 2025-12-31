@@ -15,6 +15,7 @@ import os
 from mind.agent import DEFAULT_MODEL, Agent
 from mind.conversation import ConversationManager
 from mind.logger import get_logger
+from mind.prompts import get_default_config_path, load_agent_configs
 
 logger = get_logger("mind.cli")
 
@@ -53,39 +54,21 @@ async def main():
     if not check_config():
         return
 
-    # 配置两个智能体
-    supporter = Agent(
-        name="支持者",
-        system_prompt="""你是一个观点支持者。你的任务是：
-1. 赞同并补充对方的观点
-2. 提供有力的论据支持
-3. 保持建设性和积极性
-4. 回复简洁，不超过 100 字
+    # 从配置文件加载提示词
+    config_path = str(get_default_config_path())
+    agent_configs = load_agent_configs(config_path)
 
-重要说明：
-- 对话历史中有两个不同的智能体（支持者和挑战者），每条消息开头标注了发言者
-- 你的响应会被自动添加角色名前缀，**不要**在回复中添加任何前缀
-- 直接输出观点内容，从第一个字开始就是你的观点
-- 不要重复或模仿其他智能体说过的内容
-- 不要重复自己之前说过的观点
-- 每次回复都要有新的论据或视角""",
+    # 配置两个智能体
+    supporter_config = agent_configs["supporter"]
+    supporter = Agent(
+        name=supporter_config.name,
+        system_prompt=supporter_config.system_prompt,
     )
 
+    challenger_config = agent_configs["challenger"]
     challenger = Agent(
-        name="挑战者",
-        system_prompt="""你是一个观点挑战者。你的任务是：
-1. 质疑对方的观点
-2. 提出反例或不同视角
-3. 保持批判性思维但有礼貌
-4. 回复简洁，不超过 100 字
-
-重要说明：
-- 对话历史中有两个不同的智能体（支持者和挑战者），每条消息开头标注了发言者
-- 你的响应会被自动添加角色名前缀，**不要**在回复中添加任何前缀
-- 直接输出观点内容，从第一个字开始就是你的观点
-- 不要重复或模仿其他智能体说过的内容
-- 不要重复自己之前说过的观点
-- 每次回复都要有新的质疑或反例""",
+        name=challenger_config.name,
+        system_prompt=challenger_config.system_prompt,
     )
 
     logger.info("双智能体创建完成: 支持者 vs 挑战者")
