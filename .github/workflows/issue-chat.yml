@@ -49,120 +49,124 @@ jobs:
           from mind.memory import MemoryManager, TokenConfig
           from mind.prompts import get_default_config_path, load_agent_configs
 
-          # 配置
-          MAX_TURNS = 500
-          issue_title = os.getenv("ISSUE_TITLE")
-          issue_body = os.getenv("ISSUE_BODY")
-          issue_number = os.getenv("ISSUE_NUMBER")
+          async def run_conversation():
+              # 配置
+              MAX_TURNS = 500
+              issue_title = os.getenv("ISSUE_TITLE")
+              issue_body = os.getenv("ISSUE_BODY")
+              issue_number = os.getenv("ISSUE_NUMBER")
 
-          # 构建主题
-          topic = issue_title
-          if issue_body:
-              topic = f"{topic}\n\n{issue_body}"
+              # 构建主题
+              topic = issue_title
+              if issue_body:
+                  topic = f"{topic}\n\n{issue_body}"
 
-          print(f"📝 Issue #{issue_number}: {issue_title}")
+              print(f"📝 Issue #{issue_number}: {issue_title}")
 
-          # 加载智能体配置
-          config_path = str(get_default_config_path())
-          agent_configs = load_agent_configs(config_path)
+              # 加载智能体配置
+              config_path = str(get_default_config_path())
+              agent_configs = load_agent_configs(config_path)
 
-          # 创建智能体
-          supporter = Agent(
-              name=agent_configs["supporter"].name,
-              system_prompt=agent_configs["supporter"].system_prompt,
-          )
-          challenger = Agent(
-              name=agent_configs["challenger"].name,
-              system_prompt=agent_configs["challenger"].system_prompt,
-          )
+              # 创建智能体
+              supporter = Agent(
+                  name=agent_configs["supporter"].name,
+                  system_prompt=agent_configs["supporter"].system_prompt,
+              )
+              challenger = Agent(
+                  name=agent_configs["challenger"].name,
+                  system_prompt=agent_configs["challenger"].system_prompt,
+              )
 
-          # 创建对话管理器（使用默认配置：150k tokens，3次清理后退出）
-          manager = ConversationManager(
-              agent_a=supporter,
-              agent_b=challenger,
-              memory=MemoryManager(TokenConfig()),
-              turn_interval=0.1,
-          )
+              # 创建对话管理器（使用默认配置：150k tokens，3次清理后退出）
+              manager = ConversationManager(
+                  agent_a=supporter,
+                  agent_b=challenger,
+                  memory=MemoryManager(TokenConfig()),
+                  turn_interval=0.1,
+              )
 
-          # 收集输出
-          output = []
-          output.append(f"🎯 **对话主题**: {topic}")
-          output.append("")
-          output.append("---")
-          output.append("")
+              # 收集输出
+              output = []
+              output.append(f"🎯 **对话主题**: {topic}")
+              output.append("")
+              output.append("---")
+              output.append("")
 
-          # 初始化主题
-          topic_msg = {
-              "role": "user",
-              "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
-          }
-          manager.messages.append(topic_msg)
-          manager.memory.add_message(topic_msg["role"], topic_msg["content"])
+              # 初始化主题
+              topic_msg = {
+                  "role": "user",
+                  "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
+              }
+              manager.messages.append(topic_msg)
+              manager.memory.add_message(topic_msg["role"], topic_msg["content"])
 
-          # 运行对话
-          turn_count = 0
-          for _ in range(MAX_TURNS):
-              current_agent = manager.agent_a if manager.current == 0 else manager.agent_b
+              # 运行对话
+              turn_count = 0
+              for _ in range(MAX_TURNS):
+                  current_agent = manager.agent_a if manager.current == 0 else manager.agent_b
 
-              output.append(f"### [{current_agent.name}]")
-              response = await current_agent.respond(manager.messages, manager.interrupt)
+                  output.append(f"### [{current_agent.name}]")
+                  response = await current_agent.respond(manager.messages, manager.interrupt)
 
-              if response is not None:
-                  # 移除可能的前缀
-                  patterns = [
-                      rf"^\[{re.escape(current_agent.name)}\]:\s*",
-                      rf"^\[{re.escape(current_agent.name)}]\uFF1A\s*",
-                      rf"^\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",
-                      rf"^\*\*{re.escape(current_agent.name)}:\*\*\s*",
-                      rf"^{re.escape(current_agent.name)}\uFF1A\s*",
-                  ]
-                  for pattern in patterns:
-                      response = re.sub(pattern, "", response, count=1).lstrip()
+                  if response is not None:
+                      # 移除可能的前缀
+                      patterns = [
+                          rf"^\[{re.escape(current_agent.name)}\]:\s*",
+                          rf"^\[{re.escape(current_agent.name)}]\uFF1A\s*",
+                          rf"^\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",
+                          rf"^\*\*{re.escape(current_agent.name)}:\*\*\s*",
+                          rf"^{re.escape(current_agent.name)}\uFF1A\s*",
+                      ]
+                      for pattern in patterns:
+                          response = re.sub(pattern, "", response, count=1).lstrip()
 
-                  output.append(response)
-                  output.append("")
+                      output.append(response)
+                      output.append("")
 
-                  formatted = f"[{current_agent.name}]: {response}"
-                  msg = {"role": "assistant", "content": formatted}
-                  manager.messages.append(msg)
-                  manager.memory.add_message(msg["role"], msg["content"])
-                  manager.turn += 1
-                  turn_count += 1
-                  manager.current = 1 - manager.current
+                      formatted = f"[{current_agent.name}]: {response}"
+                      msg = {"role": "assistant", "content": formatted}
+                      manager.messages.append(msg)
+                      manager.memory.add_message(msg["role"], msg["content"])
+                      manager.turn += 1
+                      turn_count += 1
+                      manager.current = 1 - manager.current
 
-                  # 检查是否需要清理
-                  status = manager.memory.get_status()
-                  if status == "red":
-                      manager._trim_count += 1
-                      old_count = len(manager.messages)
-                      manager.messages = manager.memory.trim_messages(manager.messages)
-                      new_count = len(manager.messages)
+                      # 检查是否需要清理
+                      status = manager.memory.get_status()
+                      if status == "red":
+                          manager._trim_count += 1
+                          old_count = len(manager.messages)
+                          manager.messages = manager.memory.trim_messages(manager.messages)
+                          new_count = len(manager.messages)
 
-                      # 检查是否需要退出
-                      if manager.should_exit_after_trim():
-                          manager.summary = await manager._summarize_conversation()
-                          output.append("")
-                          output.append("---")
-                          output.append("")
-                          output.append("⚠️ 对话结束（上下文超限）")
-                          output.append("")
-                          output.append("📝 **对话总结**")
-                          output.append(manager.summary)
-                          break
+                          # 检查是否需要退出
+                          if manager.should_exit_after_trim():
+                              manager.summary = await manager._summarize_conversation()
+                              output.append("")
+                              output.append("---")
+                              output.append("")
+                              output.append("⚠️ 对话结束（上下文超限）")
+                              output.append("")
+                              output.append("📝 **对话总结**")
+                              output.append(manager.summary)
+                              break
 
-          # 添加统计
-          output.append("")
-          output.append("---")
-          output.append("")
-          output.append(f"📊 **统计**: {turn_count} 轮对话, {manager.memory._total_tokens} tokens")
+              # 添加统计
+              output.append("")
+              output.append("---")
+              output.append("")
+              output.append(f"📊 **统计**: {turn_count} 轮对话, {manager.memory._total_tokens} tokens")
 
-          # 输出结果
-          result = "\\n".join(output)
-          print(result)
+              # 输出结果
+              result = "\\n".join(output)
+              print(result)
 
-          # 保存到文件供 gh 命令使用
-          with open("/tmp/comment.txt", "w", encoding="utf-8") as f:
-              f.write(result)
+              # 保存到文件供 gh 命令使用
+              with open("/tmp/comment.txt", "w", encoding="utf-8") as f:
+                  f.write(result)
+
+          # 运行异步函数
+          asyncio.run(run_conversation())
           EOF
 
           # 使用 gh 发布评论
