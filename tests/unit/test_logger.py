@@ -143,6 +143,10 @@ class TestLogOutput:
         # Act
         logger.info("测试输出消息")
 
+        # 等待异步写入完成
+        import time
+        time.sleep(0.2)
+
         # Assert
         content = log_file.read_text()
         assert "测试输出消息" in content

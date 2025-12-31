@@ -18,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 
 from anthropic.types import MessageParam
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from mind.agent import Agent
 from mind.logger import get_logger
@@ -27,6 +29,9 @@ logger = get_logger("mind.conversation")
 
 # 对话记忆保存目录
 MEMORY_DIR = Path("conversations")
+
+# Rich console 用于进度条显示
+console = Console()
 
 
 def _is_input_ready():
@@ -89,6 +94,31 @@ class ConversationManager:
 
         logger.info(f"对话已保存到: {filepath}")
         return filepath
+
+    def _show_token_progress(self):
+        """显示 token 使用进度条"""
+        tokens = self.memory._total_tokens
+        max_tokens = self.memory.config.max_context
+        percentage = min(tokens / max_tokens, 1.0)
+
+        # 根据使用率选择颜色
+        if percentage < 0.8:
+            color = "[green]"
+        elif percentage < 0.95:
+            color = "[yellow]"
+        else:
+            color = "[red]"
+
+        # 计算进度条宽度
+        bar_width = 30
+        filled = int(bar_width * percentage)
+        bar = "█" * filled + "░" * (bar_width - filled)
+
+        # 打印进度条（使用 \r 覆盖当前行）
+        console.print(
+            f"\r{color}Token:[{bar}] {tokens}/{max_tokens} ({percentage:.1%})[/{color}]",
+            end="",
+        )
 
     async def start(self, topic: str):
         """开始对话
@@ -166,7 +196,7 @@ class ConversationManager:
         # 确定当前发言的智能体
         current_agent = self.agent_a if self.current == 0 else self.agent_b
 
-        # 打印智能体名称
+        # 打印智能体名称（换行以避免覆盖进度条）
         print(f"\n[{current_agent.name}]: ", end="", flush=True)
 
         # 智能体响应
@@ -198,11 +228,16 @@ class ConversationManager:
             self.turn += 1
             logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应完成")
 
+            # 每3轮记录一次 token 使用情况
+            if self.turn % 3 == 0:
+                logger.info(f"Token 使用: {self.memory._total_tokens}/{self.memory.config.max_context} ({self.memory._total_tokens / self.memory.config.max_context:.1%})")
+
+            # 显示 token 进度条
+            self._show_token_progress()
+
             # 检查记忆状态并在必要时清理
             status = self.memory.get_status()
-            if status == "yellow":
-                logger.warning(f"Token 使用: {self.memory._total_tokens}/{self.memory.config.max_context}")
-            elif status == "red":
+            if status == "red":
                 logger.warning(f"Token 超限，开始清理对话历史...")
                 old_count = len(self.messages)
                 self.messages = self.memory.trim_messages(self.messages)
