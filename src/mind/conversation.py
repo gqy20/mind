@@ -122,6 +122,10 @@ class ConversationManager:
         # 如果未被中断，记录响应
         if response is not None:
             # 添加角色名前缀，使 AI 能区分不同智能体
+            # 防御性去重：如果响应已包含前缀，先移除
+            prefix = f"[{current_agent.name}]:"
+            if response.startswith(prefix):
+                response = response[len(prefix):].lstrip()
             formatted_content = f"[{current_agent.name}]: {response}"
             msg = {"role": "assistant", "content": formatted_content}
             self.messages.append(msg)

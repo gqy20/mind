@@ -181,6 +181,24 @@ class TestConversationManagerMessageFormat:
         assert manager.messages[1]["content"] == "[支持者]: 支持观点"
         assert manager.messages[2]["content"] == "[挑战者]: 挑战观点"
 
+    @pytest.mark.asyncio
+    async def test_turn_removes_duplicate_prefix(self):
+        """测试：如果响应已包含前缀，应去重"""
+        # Arrange
+        agent_a = Agent(name="支持者", system_prompt="你是支持者")
+        agent_b = Agent(name="挑战者", system_prompt="你是挑战者")
+        manager = ConversationManager(agent_a=agent_a, agent_b=agent_b)
+        manager.messages.append({"role": "user", "content": "主题"})
+
+        # 模拟 AI 返回的内容已经包含前缀
+        with patch.object(agent_a, "respond", return_value="[支持者]: 这是观点"):
+            # Act
+            await manager._turn()
+
+        # Assert - 前缀应该只出现一次
+        assert len(manager.messages) == 2
+        assert manager.messages[1]["content"] == "[支持者]: 这是观点"
+
 
 class TestConversationManagerTurn:
     """测试对话轮次管理"""
