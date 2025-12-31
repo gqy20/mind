@@ -26,6 +26,8 @@ DEFAULT_BACKUP_COUNT = 5
 _loggers: dict[str, type] = {}
 # 每个 logger 的 handler ID 集合
 _handler_ids: dict[str, list[int]] = {}
+# 全局控制台处理器 ID（只添加一次）
+_global_console_handler_id: int | None = None
 
 
 def setup_logger(
@@ -73,22 +75,24 @@ def setup_logger(
             "<level>{message}</level>"
         )
 
-    # 移除该 logger 的旧处理器（如果存在）
+    global _global_console_handler_id
+
+    # 移除该 logger 的旧文件处理器（如果存在）
     if name in _handler_ids:
         for handler_id in _handler_ids[name]:
             _logger.remove(handler_id)
 
-    # 初始化该 logger 的 handler ID 列表
+    # 初始化该 logger 的 handler ID 列表（只记录文件处理器）
     _handler_ids[name] = []
 
-    # 添加控制台处理器
-    console_id = _logger.add(
-        sink=lambda msg: print(msg, end=""),
-        format=format_string,
-        level=level,
-        colorize=True,
-    )
-    _handler_ids[name].append(console_id)
+    # 添加全局控制台处理器（只添加一次）
+    if _global_console_handler_id is None:
+        _global_console_handler_id = _logger.add(
+            sink=lambda msg: print(msg, end=""),
+            format=format_string,
+            level=level,
+            colorize=True,
+        )
 
     # 添加文件处理器
     if log_to_file:
