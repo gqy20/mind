@@ -41,6 +41,7 @@ def setup_logger(
     backup_count: int = DEFAULT_BACKUP_COUNT,
     format_string: str | None = None,
     use_timestamp: bool = True,
+    console_output: bool = False,
 ) -> type:
     """配置并返回一个 logger 类型
 
@@ -54,6 +55,7 @@ def setup_logger(
         backup_count: 保留的备份文件数量
         format_string: 自定义日志格式
         use_timestamp: 是否在文件名中添加时间戳
+        console_output: 是否输出到控制台（默认 False，只写文件）
 
     Returns:
         logger 类型
@@ -85,8 +87,8 @@ def setup_logger(
     # 初始化该 logger 的 handler ID 列表（只记录文件处理器）
     _handler_ids[name] = []
 
-    # 添加全局控制台处理器（只添加一次）
-    if _global_console_handler_id is None:
+    # 添加全局控制台处理器（只添加一次，且仅当 console_output=True 时）
+    if console_output and _global_console_handler_id is None:
         _global_console_handler_id = _logger.add(
             sink=lambda msg: print(msg, end=""),
             format=format_string,
