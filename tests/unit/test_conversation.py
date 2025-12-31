@@ -140,6 +140,48 @@ class TestConversationManagerUserInput:
         assert manager.messages[0]["content"] == "用户消息"
 
 
+class TestConversationManagerMessageFormat:
+    """测试消息格式规范"""
+
+    @pytest.mark.asyncio
+    async def test_turn_message_contains_role_prefix(self):
+        """测试：智能体回复的消息应包含 [角色名]: 前缀"""
+        # Arrange
+        agent_a = Agent(name="支持者", system_prompt="你是支持者")
+        agent_b = Agent(name="挑战者", system_prompt="你是挑战者")
+        manager = ConversationManager(agent_a=agent_a, agent_b=agent_b)
+        manager.messages.append({"role": "user", "content": "主题"})
+
+        with patch.object(agent_a, "respond", return_value="这是支持者的观点"):
+            # Act
+            await manager._turn()
+
+        # Assert - 消息内容应包含角色前缀
+        assert len(manager.messages) == 2
+        assert manager.messages[1]["role"] == "assistant"
+        assert manager.messages[1]["content"] == "[支持者]: 这是支持者的观点"
+
+    @pytest.mark.asyncio
+    async def test_turn_two_agents_different_prefixes(self):
+        """测试：两个智能体应有不同的角色前缀"""
+        # Arrange
+        agent_a = Agent(name="支持者", system_prompt="你是支持者")
+        agent_b = Agent(name="挑战者", system_prompt="你是挑战者")
+        manager = ConversationManager(agent_a=agent_a, agent_b=agent_b)
+        manager.messages.append({"role": "user", "content": "主题"})
+
+        with patch.object(agent_a, "respond", return_value="支持观点"):
+            with patch.object(agent_b, "respond", return_value="挑战观点"):
+                # Act - 两轮对话
+                await manager._turn()
+                await manager._turn()
+
+        # Assert - 两条消息应有不同的前缀
+        assert len(manager.messages) == 3
+        assert manager.messages[1]["content"] == "[支持者]: 支持观点"
+        assert manager.messages[2]["content"] == "[挑战者]: 挑战观点"
+
+
 class TestConversationManagerTurn:
     """测试对话轮次管理"""
 
