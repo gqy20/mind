@@ -1,0 +1,22 @@
+name: 对话话题
+description: 创建一个 AI 智能体对话话题
+title: "[对话] "
+labels: ["chat"]
+body:
+  - type: textarea
+    id: topic
+    attributes:
+      label: 对话主题
+      description: 简要描述你想让 AI 智能体探讨的话题
+      placeholder: 例如：人工智能是否应该拥有法律人格？
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 背景补充（可选）
+      description: 提供更多背景信息或具体要求
+      placeholder: 可以补充一些背景信息、限制条件或期望的讨论方向...
+    validations:
+      required: false
