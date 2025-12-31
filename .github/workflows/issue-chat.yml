@@ -12,7 +12,8 @@ jobs:
   chat:
     if: |
       contains(github.event.issue.labels.*.name, 'chat') ||
-      contains(github.event.issue.labels.*.name, '对话')
+      contains(github.event.issue.labels.*.name, '对话') ||
+      startsWith(github.event.issue.title, '[对话]')
     name: Run Conversation via Issue
     runs-on: ubuntu-latest
 
