@@ -6,8 +6,11 @@ import asyncio
 import os
 from dataclasses import dataclass
 
-from anthropic import AsyncAnthropic
+from anthropic import APIStatusError, AsyncAnthropic
 from anthropic.types import MessageParam
+from rich.console import Console
+
+console = Console()
 
 # 默认模型配置
 DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
@@ -76,9 +79,33 @@ class Agent:
                     elif event.type == "content_block_stop":
                         pass
 
+        except APIStatusError as e:
+            # API 状态错误（401, 429, 500 等）
+            status_code = e.response.status_code if hasattr(e, "response") else "未知"
+            error_msg = str(e)
+
+            if status_code == 401:
+                console.print("\n[red]❌ 认证失败：API Key 无效或已过期[/red]")
+                console.print("[yellow]请检查 ANTHROPIC_API_KEY 环境变量[/yellow]")
+            elif status_code == 429:
+                console.print("\n[yellow]⚠️  速率限制：请求过于频繁，请稍后重试[/yellow]")
+            elif status_code >= 500:
+                console.print(f"\n[red]❌ API 错误 ({status_code})：服务器错误，请稍后重试[/red]")
+            else:
+                console.print(f"\n[red]❌ API 错误 ({status_code})：{error_msg}[/red]")
+
+            return None
+
+        except TimeoutError:
+            console.print("\n[red]❌ 请求超时：网络连接超时，请检查网络设置[/red]")
+            return None
+
+        except OSError as e:
+            console.print(f"\n[red]❌ 网络错误：{e}[/red]")
+            return None
+
         except Exception as e:
-            # 错误时也打印
-            print(f"\n[错误: {e}]")
+            console.print(f"\n[red]❌ 未知错误：{e}[/red]")
             return None
 
         return response_text
