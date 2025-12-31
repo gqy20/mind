@@ -47,7 +47,12 @@ class Agent:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY 环境变量未设置")
-        self.client = AsyncAnthropic(api_key=api_key)
+        # 支持 base_url（用于代理等场景）
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
+        if base_url:
+            self.client = AsyncAnthropic(api_key=api_key, base_url=base_url)
+        else:
+            self.client = AsyncAnthropic(api_key=api_key)
         logger.info(f"智能体初始化: {self.name}, 模型: {self.model}")
 
     async def respond(
