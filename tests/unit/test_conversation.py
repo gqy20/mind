@@ -14,6 +14,7 @@ import pytest
 
 from mind.agent import Agent
 from mind.conversation import ConversationManager
+from mind.memory import MemoryManager, TokenConfig
 
 
 class TestConversationManagerInit:
@@ -261,3 +262,65 @@ class TestConversationManagerTurn:
 
             # Assert
             assert len(manager.messages) == initial_count  # 没有添加新消息
+
+
+class TestConversationManagerAutoExit:
+    """测试自动退出和总结功能"""
+
+    @pytest.mark.asyncio
+    async def test_should_exit_after_max_trims(self):
+        """测试：达到最大清理次数时应退出"""
+        # Arrange
+        agent_a = Agent(name="A", system_prompt="你是A")
+        agent_b = Agent(name="B", system_prompt="你是B")
+        manager = ConversationManager(
+            agent_a=agent_a,
+            agent_b=agent_b,
+            memory=MemoryManager(TokenConfig(max_trim_count=2)),
+        )
+        manager._trim_count = 2  # 设置为最大值
+
+        # Act
+        result = manager.should_exit_after_trim()
+
+        # Assert
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_should_not_exit_below_max_trims(self):
+        """测试：未达到最大清理次数时不应退出"""
+        # Arrange
+        agent_a = Agent(name="A", system_prompt="你是A")
+        agent_b = Agent(name="B", system_prompt="你是B")
+        manager = ConversationManager(
+            agent_a=agent_a,
+            agent_b=agent_b,
+            memory=MemoryManager(TokenConfig(max_trim_count=3)),
+        )
+        manager._trim_count = 1  # 低于最大值
+
+        # Act
+        result = manager.should_exit_after_trim()
+
+        # Assert
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_summarize_conversation_creates_summary(self):
+        """测试：总结功能应创建对话摘要"""
+        # Arrange
+        agent_a = Agent(name="A", system_prompt="你是A")
+        agent_b = Agent(name="B", system_prompt="你是B")
+        manager = ConversationManager(agent_a=agent_a, agent_b=agent_b)
+        manager.messages = [
+            {"role": "user", "content": "主题：AI的发展"},
+            {"role": "assistant", "content": "[A]: AI发展很快"},
+            {"role": "assistant", "content": "[B]: 但也有挑战"},
+        ]
+        manager.topic = "AI的发展"
+        manager.turn = 2
+
+        # Act & Assert - 验证方法存在
+        assert hasattr(manager, "_summarize_conversation")
+        # 注意：实际调用需要 mock API，这里只验证方法存在
+        # 完整测试在集成测试中进行

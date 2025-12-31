@@ -27,6 +27,7 @@ class TestTokenConfig:
         assert config.warning_threshold == 120_000
         assert config.target_after_trim == 80_000
         assert config.min_keep_recent == 10
+        assert config.max_trim_count == 3  # 新增：最大清理次数
 
     def test_custom_values(self):
         """测试：应支持自定义配置"""
@@ -36,6 +37,7 @@ class TestTokenConfig:
             warning_threshold=80_000,
             target_after_trim=50_000,
             min_keep_recent=5,
+            max_trim_count=5,
         )
 
         # Assert
@@ -43,6 +45,7 @@ class TestTokenConfig:
         assert config.warning_threshold == 80_000
         assert config.target_after_trim == 50_000
         assert config.min_keep_recent == 5
+        assert config.max_trim_count == 5  # 新增：最大清理次数
 
 
 class TestMemoryManagerInit:
