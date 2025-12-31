@@ -6,7 +6,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 
 class AgentConfig(BaseModel):
@@ -51,7 +51,7 @@ def load_agent_configs(config_path: str) -> dict[str, AgentConfig]:
     if not config_file.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
 
-    with open(config_file, "r", encoding="utf-8") as f:
+    with open(config_file, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict) or "agents" not in data:

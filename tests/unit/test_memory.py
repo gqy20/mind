@@ -9,8 +9,6 @@
 - 边界保护（最少保留轮数）
 """
 
-import pytest
-
 from mind.memory import MemoryManager, TokenConfig
 
 
@@ -171,10 +169,12 @@ class TestGetStatus:
     def test_status_green_when_under_warning(self):
         """测试：低于警告阈值应为 green"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            warning_threshold=100_000,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                warning_threshold=100_000,
+            )
+        )
         manager._total_tokens = 50_000
 
         # Act
@@ -186,10 +186,12 @@ class TestGetStatus:
     def test_status_yellow_when_between_warning_and_max(self):
         """测试：在警告阈值和上限之间应为 yellow"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            warning_threshold=100_000,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                warning_threshold=100_000,
+            )
+        )
         manager._total_tokens = 120_000
 
         # Act
@@ -201,10 +203,12 @@ class TestGetStatus:
     def test_status_red_when_over_max(self):
         """测试：超过上限应为 red"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            warning_threshold=100_000,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                warning_threshold=100_000,
+            )
+        )
         manager._total_tokens = 160_000
 
         # Act
@@ -216,10 +220,12 @@ class TestGetStatus:
     def test_status_boundary_at_warning_threshold(self):
         """测试：正好在警告阈值应为 yellow"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            warning_threshold=100_000,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                warning_threshold=100_000,
+            )
+        )
         manager._total_tokens = 100_000
 
         # Act
@@ -231,10 +237,12 @@ class TestGetStatus:
     def test_status_boundary_at_max(self):
         """测试：正好在上限应为 red"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            warning_threshold=100_000,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                warning_threshold=100_000,
+            )
+        )
         manager._total_tokens = 150_000
 
         # Act
@@ -290,10 +298,12 @@ class TestTrimMessages:
     def test_trim_no_action_when_under_limit(self):
         """测试：未超限时不应清理"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            target_after_trim=80_000,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                target_after_trim=80_000,
+            )
+        )
         messages = [
             {"role": "user", "content": "Message 1"},
             {"role": "assistant", "content": "Response 1"},
@@ -313,11 +323,13 @@ class TestTrimMessages:
     def test_trim_keeps_recent_messages(self):
         """测试：清理时应保留最近的消息"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=20_000,  # 较小值便于测试，确保会触发清理
-            target_after_trim=10_000,
-            min_keep_recent=2,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=20_000,  # 较小值便于测试，确保会触发清理
+                target_after_trim=10_000,
+                min_keep_recent=2,
+            )
+        )
 
         # 创建 5 条消息，每条约 5000 tokens（20000 字符）
         messages = []
@@ -341,11 +353,13 @@ class TestTrimMessages:
     def test_trim_respects_min_keep_recent(self):
         """测试：清理时应遵守最少保留轮数"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=10_000,  # 确保触发清理
-            target_after_trim=5_000,
-            min_keep_recent=3,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=10_000,  # 确保触发清理
+                target_after_trim=5_000,
+                min_keep_recent=3,
+            )
+        )
 
         # 创建消息，每条约 3000 tokens（12000 字符）
         messages = []
@@ -366,11 +380,13 @@ class TestTrimMessages:
     def test_trim_updates_token_counts(self):
         """测试：清理后应更新 token 计数"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=10_000,  # 确保触发清理
-            target_after_trim=5_000,
-            min_keep_recent=2,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=10_000,  # 确保触发清理
+                target_after_trim=5_000,
+                min_keep_recent=2,
+            )
+        )
 
         messages = []
         for i in range(5):
@@ -387,7 +403,9 @@ class TestTrimMessages:
         # Assert
         assert manager._total_tokens < initial_total
         # 清理后的 tokens 应该接近 target + min_keep 的 tokens
-        expected_max = manager.config.target_after_trim + 3000 * manager.config.min_keep_recent
+        expected_max = (  # noqa: E501
+            manager.config.target_after_trim + 3000 * manager.config.min_keep_recent
+        )
         assert manager._total_tokens <= expected_max
 
 
@@ -421,11 +439,13 @@ class TestEdgeCases:
     def test_all_messages_fit_in_target(self):
         """测试：所有消息都能放入目标时应全部保留"""
         # Arrange
-        manager = MemoryManager(TokenConfig(
-            max_context=150_000,
-            target_after_trim=100_000,
-            min_keep_recent=2,
-        ))
+        manager = MemoryManager(
+            TokenConfig(
+                max_context=150_000,
+                target_after_trim=100_000,
+                min_keep_recent=2,
+            )
+        )
 
         # 创建总 token 数小于 target 的消息
         messages = []

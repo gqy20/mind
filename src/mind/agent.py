@@ -88,7 +88,7 @@ class Agent:
 
         except APIStatusError as e:
             # API 状态错误（401, 429, 500 等）
-            status_code = e.response.status_code if hasattr(e, "response") else "未知"
+            status_code = e.response.status_code if hasattr(e, "response") else 0
             error_msg = str(e)
             logger.error(f"API 状态错误: {status_code}, 消息: {error_msg}")
 
@@ -96,9 +96,9 @@ class Agent:
                 console.print("\n[red]❌ 认证失败：API Key 无效或已过期[/red]")
                 console.print("[yellow]请检查 ANTHROPIC_API_KEY 环境变量[/yellow]")
             elif status_code == 429:
-                console.print("\n[yellow]⚠️  速率限制：请求过于频繁，请稍后重试[/yellow]")
+                console.print("\n[yellow]⚠️速率限制：请求过于频繁，请稍后重试[/yellow]")
             elif status_code >= 500:
-                console.print(f"\n[red]❌ API 错误 ({status_code})：服务器错误，请稍后重试[/red]")
+                console.print(f"\n[red]❌ API 错误 ({status_code})：服务器错误[/red]")
             else:
                 console.print(f"\n[red]❌ API 错误 ({status_code})：{error_msg}[/red]")
 

@@ -8,8 +8,6 @@ Prompts 模块的单元测试
 - 验证配置格式
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 from pydantic import ValidationError
@@ -25,14 +23,8 @@ class TestLoadAgentConfigs:
         # Arrange
         config_content = {
             "agents": {
-                "supporter": {
-                    "name": "支持者",
-                    "system_prompt": "你是一个支持者"
-                },
-                "challenger": {
-                    "name": "挑战者",
-                    "system_prompt": "你是一个挑战者"
-                }
+                "supporter": {"name": "支持者", "system_prompt": "你是一个支持者"},
+                "challenger": {"name": "挑战者", "system_prompt": "你是一个挑战者"},
             }
         }
         config_file = tmp_path / "prompts.yaml"
@@ -118,10 +110,7 @@ class TestLoadAgentConfigs:
         # Arrange
         config_content = {
             "agents": {
-                "test": {
-                    "name": "测试",
-                    "system_prompt": "第一行\n第二行\n第三行"
-                }
+                "test": {"name": "测试", "system_prompt": "第一行\n第二行\n第三行"}
             }
         }
         config_file = tmp_path / "prompts.yaml"

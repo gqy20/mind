@@ -1,4 +1,30 @@
 repos:
+  # Ruff - 使用 local hooks 以调用 uv run
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Ruff Lint
+        entry: uv run ruff check . --fix
+        language: system
+        types_or: [python]
+
+      - id: ruff-format
+        name: Ruff Format
+        entry: uv run ruff format .
+        language: system
+        types_or: [python]
+
+  # MyPy - 类型检查
+  - repo: local
+    hooks:
+      - id: mypy
+        name: MyPy
+        entry: uv run mypy src/mind
+        language: system
+        types_or: [python]
+        pass_filenames: false
+
+  # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
@@ -11,14 +37,8 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
 
+  # GitHub Actions lint
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.4
     hooks:
       - id: actionlint
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-      - id: ruff-format

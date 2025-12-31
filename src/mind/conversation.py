@@ -16,14 +16,14 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from anthropic.types import MessageParam
 from rich.console import Console
-from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from mind.agent import Agent
 from mind.logger import get_logger
-from mind.memory import MemoryManager, TokenConfig
+from mind.memory import MemoryManager
 
 logger = get_logger("mind.conversation")
 
@@ -70,6 +70,10 @@ class ConversationManager:
             保存的文件路径
         """
         MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+        # 确保 start_time 已设置（对话结束时应该已经设置）
+        if self.start_time is None:
+            self.start_time = datetime.now()
 
         # 生成文件名：主题_时间戳.json
         timestamp = self.start_time.strftime("%Y%m%d_%H%M%S")
@@ -118,12 +122,18 @@ class ConversationManager:
             对话总结文本
         """
         # 构建总结提示词
+        content_preview = chr(
+            10
+        ).join(
+            f"- {msg['role']}: {(msg['content'][:100] if isinstance(msg['content'], str) else str(cast(str, msg['content']))[:100])}..."  # noqa: E501
+            for msg in self.messages[-20:]
+        )
         summary_prompt = f"""请对以下对话进行总结，包括：
 
 主题：{self.topic}
 
 对话内容：
-{chr(10).join(f"- {msg['role']}: {msg['content'][:100]}..." for msg in self.messages[-20:])}
+{content_preview}
 
 请提供：
 1. 核心观点总结（支持者的主要论点）
@@ -135,13 +145,11 @@ class ConversationManager:
 
         # 使用 agent_a 生成总结
         messages_for_summary: list[MessageParam] = [
-            {"role": "user", "content": summary_prompt}
+            cast(MessageParam, {"role": "user", "content": summary_prompt})
         ]
 
         try:
-            response = await self.agent_a.respond(
-                messages_for_summary, asyncio.Event()
-            )
+            response = await self.agent_a.respond(messages_for_summary, asyncio.Event())
             summary = response or "对话总结生成失败"
             logger.info(f"对话总结已生成: {len(summary)} 字")
             return summary
@@ -169,10 +177,10 @@ class ConversationManager:
         bar = "█" * filled + "░" * (bar_width - filled)
 
         # 打印进度条（使用 \r 覆盖当前行）
-        console.print(
-            f"\r{color}Token:[{bar}] {tokens}/{max_tokens} ({percentage:.1%})[/{color}]",
-            end="",
+        progress_text = (
+            f"\r{color}Token:[{bar}] {tokens}/{max_tokens} ({percentage:.1%})[/{color}]"
         )
+        console.print(progress_text, end="")
 
     async def start(self, topic: str):
         """开始对话
@@ -185,13 +193,16 @@ class ConversationManager:
         self.start_time = datetime.now()
 
         # 初始化主题
-        topic_msg = {
-            "role": "user",
-            "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
-        }
+        topic_msg = cast(
+            MessageParam,
+            {
+                "role": "user",
+                "content": f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
+            },
+        )
         self.messages.append(topic_msg)
         # 使用记忆管理器记录主题消息
-        self.memory.add_message(topic_msg["role"], topic_msg["content"])
+        self.memory.add_message(topic_msg["role"], cast(str, topic_msg["content"]))
         logger.info(f"对话开始，主题: {topic}")
 
         print("\n💡 提示: 按 Enter 打断对话并输入消息，Ctrl+C 退出\n")
@@ -269,22 +280,28 @@ class ConversationManager:
                 rf"^\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",  # 加粗+中文冒号
                 rf"^\*\*{re.escape(current_agent.name)}:\*\*\s*",  # 加粗+英文冒号
                 rf"^{re.escape(current_agent.name)}\uFF1A\s*",  # 纯角色名+中文冒号
-                rf"^\[{re.escape(current_agent.name)}\]\s*\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",  # 组合格式
+                rf"^\[{re.escape(current_agent.name)}\]\s*\*\*{re.escape(current_agent.name)}\uFF1A\*\*\s*",  # noqa: E501
             ]
             for pattern in patterns_to_remove:
                 response = re.sub(pattern, "", response, count=1).lstrip()
 
             formatted_content = f"[{current_agent.name}]: {response}"
-            msg = {"role": "assistant", "content": formatted_content}
+            msg = cast(
+                MessageParam,
+                {"role": "assistant", "content": formatted_content},
+            )
             self.messages.append(msg)
             # 使用记忆管理器记录消息
-            self.memory.add_message(msg["role"], msg["content"])
+            self.memory.add_message(msg["role"], cast(str, msg["content"]))
             self.turn += 1
             logger.debug(f"轮次 {self.turn}: {current_agent.name} 响应完成")
 
             # 每3轮记录一次 token 使用情况
             if self.turn % 3 == 0:
-                logger.info(f"Token 使用: {self.memory._total_tokens}/{self.memory.config.max_context} ({self.memory._total_tokens / self.memory.config.max_context:.1%})")
+                logger.info(  # noqa: E501
+                    f"Token 使用: {self.memory._total_tokens}/{self.memory.config.max_context} "  # noqa: E501
+                    f"({self.memory._total_tokens / self.memory.config.max_context:.1%})"  # noqa: E501
+                )
 
             # 显示 token 进度条（前后各空一行）
             print()  # 对话内容和进度条之间的空行
@@ -295,28 +312,41 @@ class ConversationManager:
             status = self.memory.get_status()
             if status == "red":
                 self._trim_count += 1
-                logger.warning(f"Token 超限 (第 {self._trim_count} 次)，开始清理对话历史...")
+                logger.warning(  # noqa: E501
+                    f"Token 超限 (第 {self._trim_count} 次)，开始清理对话历史..."
+                )
                 old_count = len(self.messages)
-                self.messages = self.memory.trim_messages(self.messages)
+                self.messages = cast(
+                    list[MessageParam],
+                    self.memory.trim_messages(cast(list[dict], self.messages)),
+                )
                 new_count = len(self.messages)
-                logger.info(f"清理完成: {old_count} → {new_count} 条消息, {self.memory._total_tokens} tokens")
+                log_msg = (
+                    f"清理完成: {old_count} → {new_count} 条消息, "
+                    f"{self.memory._total_tokens} tokens"
+                )
+                logger.info(log_msg)
 
                 # 检查是否需要自动退出
                 if self.should_exit_after_trim():
                     print(f"\n{'=' * 60}")
-                    print(f"⚠️  已达到最大清理次数 ({self.memory.config.max_trim_count} 次)")
-                    print(f"正在生成对话总结...")
+                    warning_msg = (
+                        f"⚠️  已达到最大清理次数 "
+                        f"({self.memory.config.max_trim_count} 次)"
+                    )
+                    print(warning_msg)
+                    print("正在生成对话总结...")
                     print(f"{'=' * 60}\n")
 
                     # 生成总结
                     self.summary = await self._summarize_conversation()
 
                     print(f"\n{'=' * 60}")
-                    print(f"📝 对话总结")
+                    print("📝 对话总结")
                     print(f"{'=' * 60}")
                     print(f"{self.summary}\n")
                     print(f"{'=' * 60}")
-                    print(f"💾 对话已保存（包含总结）")
+                    print("💾 对话已保存（包含总结）")
                     print(f"{'=' * 60}\n")
 
                     # 标记退出
@@ -345,15 +375,15 @@ class ConversationManager:
             # 重置记忆管理器
             self.memory = MemoryManager()
             topic_msg = self.messages[0]
-            self.memory.add_message(topic_msg["role"], topic_msg["content"])
+            self.memory.add_message(topic_msg["role"], cast(str, topic_msg["content"]))
             self.turn = 0
             logger.info("用户重置对话历史")
             print("✅ 对话已重置\n")
         else:
             # 其他输入作为正常对话继续
-            msg = {"role": "user", "content": user_input}
+            msg = cast(MessageParam, {"role": "user", "content": user_input})
             self.messages.append(msg)
             # 使用记忆管理器记录消息
-            self.memory.add_message(msg["role"], msg["content"])
+            self.memory.add_message(msg["role"], cast(str, msg["content"]))
             logger.info(f"用户输入消息: {user_input[:50]}...")
             print("✅ 已发送，继续对话...\n")

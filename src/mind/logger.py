@@ -11,7 +11,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Protocol
 
 from loguru import logger as _logger
 
@@ -22,8 +22,31 @@ DEFAULT_LOG_FILE = "mind.log"
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 DEFAULT_BACKUP_COUNT = 5
 
+
+class LoggerProtocol(Protocol):
+    """Logger 接口协议"""
+
+    @staticmethod
+    def debug(msg: str, *args, **kwargs) -> None: ...
+
+    @staticmethod
+    def info(msg: str, *args, **kwargs) -> None: ...
+
+    @staticmethod
+    def warning(msg: str, *args, **kwargs) -> None: ...
+
+    @staticmethod
+    def error(msg: str, *args, **kwargs) -> None: ...
+
+    @staticmethod
+    def critical(msg: str, *args, **kwargs) -> None: ...
+
+    @staticmethod
+    def exception(msg: str, *args, **kwargs) -> None: ...
+
+
 # 已创建的 logger 集合
-_loggers: dict[str, type] = {}
+_loggers: dict[str, type[LoggerProtocol]] = {}
 # 每个 logger 的 handler ID 集合
 _handler_ids: dict[str, list[int]] = {}
 # 全局控制台处理器 ID（只添加一次）
@@ -42,7 +65,7 @@ def setup_logger(
     format_string: str | None = None,
     use_timestamp: bool = True,
     console_output: bool = False,
-) -> type:
+) -> type[LoggerProtocol]:
     """配置并返回一个 logger 类型
 
     Args:
@@ -168,7 +191,7 @@ def setup_logger(
     return _Logger
 
 
-def get_logger(name: str) -> type:
+def get_logger(name: str) -> type[LoggerProtocol]:
     """获取或创建指定名称的 logger
 
     Args:
@@ -188,7 +211,7 @@ def get_logger(name: str) -> type:
     return setup_logger(name)
 
 
-def get_default_logger() -> type:
+def get_default_logger() -> type[LoggerProtocol]:
     """获取默认的 mind logger
 
     Returns:

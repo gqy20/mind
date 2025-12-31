@@ -90,7 +90,7 @@ class MemoryManager:
             return []
 
         # 策略：从后往前保留，直到达到目标 token 数
-        result = []
+        result: list[dict] = []
         accumulated = 0
 
         # 至少保留最近的 min_keep_recent 轮

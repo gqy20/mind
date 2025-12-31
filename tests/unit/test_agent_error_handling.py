@@ -9,7 +9,7 @@ Agent 错误处理的单元测试
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from anthropic import APIStatusError
@@ -29,7 +29,9 @@ class TestAgentErrorHandling:
             request=request,
             content=f'{{"error":{{"message":"{message}"}}}}'.encode(),
         )
-        return APIStatusError(message, response=response, body={"error": {"message": message}})
+        return APIStatusError(  # noqa: E501
+            message, response=response, body={"error": {"message": message}}
+        )
 
     @pytest.mark.asyncio
     async def test_respond_handles_api_error_gracefully(self, capsys):
@@ -41,7 +43,9 @@ class TestAgentErrorHandling:
 
         # Mock API 抛出错误
         mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(side_effect=self._make_error(500, "API 请求失败"))
+        mock_stream.__aenter__ = AsyncMock(  # noqa: E501
+            side_effect=self._make_error(500, "API 请求失败")
+        )
 
         with patch.object(agent.client.messages, "stream", return_value=mock_stream):
             # Act

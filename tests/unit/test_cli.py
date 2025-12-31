@@ -42,7 +42,10 @@ class TestCheckConfig:
         assert "❌ 未设置" in captured.out
         assert "ANTHROPIC_API_KEY" in captured.out
 
-    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key", "ANTHROPIC_BASE_URL": "https://api.test.com"})
+    @patch.dict(
+        "os.environ",
+        {"ANTHROPIC_API_KEY": "test-key", "ANTHROPIC_BASE_URL": "https://api.test.com"},
+    )
     def test_check_config_with_custom_base_url(self, capsys):
         """测试：自定义 Base URL 应显示"""
         # Arrange & Act

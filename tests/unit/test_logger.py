@@ -11,8 +11,6 @@
 import logging
 from pathlib import Path
 
-import pytest
-
 from mind.logger import get_logger, setup_logger
 
 
@@ -145,6 +143,7 @@ class TestLogOutput:
 
         # 等待异步写入完成
         import time
+
         time.sleep(0.2)
 
         # Assert
@@ -172,6 +171,7 @@ class TestLogOutput:
 
         # 等待日志文件写入完成（loguru 使用异步写入）
         import time
+
         time.sleep(0.2)
 
         # Assert - 检查日志文件包含所有消息
