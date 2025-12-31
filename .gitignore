@@ -41,6 +41,8 @@ htmlcov/
 
 # Logs
 *.log
+logs/
+conversations/
 
 # uv
 uv.lock

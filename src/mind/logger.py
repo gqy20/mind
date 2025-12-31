@@ -5,9 +5,11 @@
 - 控制台输出（带颜色）
 - 文件输出（支持轮转）
 - 可配置的日志级别
+- 支持时间戳文件名
 """
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +24,8 @@ DEFAULT_BACKUP_COUNT = 5
 
 # 已创建的 logger 集合
 _loggers: dict[str, type] = {}
+# 每个 logger 的 handler ID 集合
+_handler_ids: dict[str, list[int]] = {}
 
 
 def setup_logger(
@@ -34,6 +38,7 @@ def setup_logger(
     max_bytes: int = DEFAULT_MAX_BYTES,
     backup_count: int = DEFAULT_BACKUP_COUNT,
     format_string: str | None = None,
+    use_timestamp: bool = True,
 ) -> type:
     """配置并返回一个 logger 类型
 
@@ -46,6 +51,7 @@ def setup_logger(
         max_bytes: 单个日志文件最大字节数
         backup_count: 保留的备份文件数量
         format_string: 自定义日志格式
+        use_timestamp: 是否在文件名中添加时间戳
 
     Returns:
         logger 类型
@@ -67,24 +73,36 @@ def setup_logger(
             "<level>{message}</level>"
         )
 
-    # 移除默认处理器
-    _logger.remove()
+    # 移除该 logger 的旧处理器（如果存在）
+    if name in _handler_ids:
+        for handler_id in _handler_ids[name]:
+            _logger.remove(handler_id)
+
+    # 初始化该 logger 的 handler ID 列表
+    _handler_ids[name] = []
 
     # 添加控制台处理器
-    _logger.add(
+    console_id = _logger.add(
         sink=lambda msg: print(msg, end=""),
         format=format_string,
         level=level,
         colorize=True,
     )
+    _handler_ids[name].append(console_id)
 
     # 添加文件处理器
     if log_to_file:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
 
+        # 添加时间戳到文件名
+        if use_timestamp:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            name_part, ext = Path(log_file).stem, Path(log_file).suffix
+            log_file = f"{name_part}_{timestamp}{ext}"
+
         # 使用 rotation 参数指定大小
-        _logger.add(
+        file_id = _logger.add(
             sink=log_path / log_file,
             format=format_string,
             level=level,
@@ -93,6 +111,7 @@ def setup_logger(
             enqueue=True,  # 异步写入，不阻塞主线程
             encoding="utf-8",
         )
+        _handler_ids[name].append(file_id)
 
     # 缓存 logger
     class _Logger:

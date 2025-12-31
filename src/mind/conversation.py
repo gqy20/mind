@@ -9,10 +9,13 @@
 """
 
 import asyncio
+import json
 import re
 import select
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 from anthropic.types import MessageParam
 
@@ -21,6 +24,9 @@ from mind.logger import get_logger
 from mind.memory import MemoryManager, TokenConfig
 
 logger = get_logger("mind.conversation")
+
+# 对话记忆保存目录
+MEMORY_DIR = Path("conversations")
 
 
 def _is_input_ready():
@@ -43,6 +49,46 @@ class ConversationManager:
     is_running: bool = True
     # 记忆管理器
     memory: MemoryManager = field(default_factory=lambda: MemoryManager())
+    # 对话主题（使用空字符串作为默认值）
+    topic: str = ""
+    # 对话开始时间（使用 None 作为默认值，在 start 时设置）
+    start_time: datetime | None = None
+
+    def save_conversation(self) -> Path:
+        """保存对话到 JSON 文件
+
+        Returns:
+            保存的文件路径
+        """
+        MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+        # 生成文件名：主题_时间戳.json
+        timestamp = self.start_time.strftime("%Y%m%d_%H%M%S")
+        # 清理主题中的非法字符
+        safe_topic = re.sub(r'[\\/*?:"<>|]', "_", self.topic)[:30]
+        filename = f"{safe_topic}_{timestamp}.json"
+        filepath = MEMORY_DIR / filename
+
+        # 构建保存数据
+        data = {
+            "topic": self.topic,
+            "start_time": self.start_time.isoformat(),
+            "end_time": datetime.now().isoformat(),
+            "turn_count": self.turn,
+            "agent_a": self.agent_a.name,
+            "agent_b": self.agent_b.name,
+            "messages": [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in self.messages
+            ],
+        }
+
+        # 保存到文件
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"对话已保存到: {filepath}")
+        return filepath
 
     async def start(self, topic: str):
         """开始对话
@@ -50,6 +96,10 @@ class ConversationManager:
         Args:
             topic: 对话主题
         """
+        # 保存主题和开始时间
+        self.topic = topic
+        self.start_time = datetime.now()
+
         # 初始化主题
         topic_msg = {
             "role": "user",
@@ -79,6 +129,10 @@ class ConversationManager:
         except KeyboardInterrupt:
             logger.info("对话被用户中断")
             print("\n\n👋 对话已结束")
+        finally:
+            # 保存对话到文件
+            filepath = self.save_conversation()
+            print(f"📁 对话已保存到: {filepath}")
 
     async def _input_mode(self):
         """输入模式 - 等待用户输入"""

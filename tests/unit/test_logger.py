@@ -35,18 +35,19 @@ class TestSetupLogger:
         """测试：应创建日志文件"""
         # Arrange
         log_dir = tmp_path / "logs"
-        log_file = log_dir / "test.log"
 
-        # Act
+        # Act - 禁用时间戳以便测试检查固定文件名
         logger = setup_logger(
             name="test_with_file",
             log_to_file=True,
             log_dir=log_dir,
             log_file="test.log",
+            use_timestamp=False,
         )
         logger.info("测试消息")
 
         # Assert
+        log_file = log_dir / "test.log"
         assert log_file.exists()
 
     def test_setup_logger_console_only(self, capsys):
@@ -131,7 +132,11 @@ class TestLogOutput:
         """测试：日志消息应写入文件"""
         # Arrange
         logger = setup_logger(
-            "test_output", log_to_file=True, log_dir=tmp_path, log_file="output.log"
+            "test_output",
+            log_to_file=True,
+            log_dir=tmp_path,
+            log_file="output.log",
+            use_timestamp=False,
         )
         log_file = tmp_path / "output.log"
 
@@ -151,6 +156,7 @@ class TestLogOutput:
             log_dir=tmp_path,
             log_file="levels.log",
             level=logging.DEBUG,
+            use_timestamp=False,
         )
         log_file = tmp_path / "levels.log"
 
@@ -186,6 +192,7 @@ class TestLogOutput:
             log_file="rotate.log",
             max_bytes=100,  # 很小，触发轮转
             backup_count=2,
+            use_timestamp=False,
         )
         log_file = tmp_path / "rotate.log"
 
