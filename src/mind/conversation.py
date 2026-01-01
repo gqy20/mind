@@ -463,21 +463,6 @@ class ConversationManager:
     # 搜索请求标记模式
     _SEARCH_REQUEST_PATTERN = re.compile(r"\[搜索:\s*([^\]]+)\]")
 
-    # 不确定性关键词
-    _UNCERTAINTY_KEYWORDS = [
-        "我不确定",
-        "不清楚",
-        "不确定",
-        "未知",
-        "最新",
-        "当前",
-        "具体数据",
-        "发布时间",
-        "是否已经",
-        "最新进展",
-        "最近消息",
-    ]
-
     def _has_search_request(self, response: str) -> bool:
         """检测 AI 响应中是否包含搜索请求
 
@@ -505,41 +490,14 @@ class ConversationManager:
         match = self._SEARCH_REQUEST_PATTERN.search(response)
         return match.group(1).strip() if match else None
 
-    def _should_search_by_keywords(self) -> bool:
-        """通过关键词检测判断是否需要搜索
-
-        Returns:
-            是否应该触发搜索
-        """
-        # 检查最近的对话内容
-        recent_messages = (
-            self.messages[-3:] if len(self.messages) >= 3 else self.messages
-        )
-
-        # 提取字符串内容并拼接
-        content_parts: list[str] = []
-        for m in recent_messages:
-            content = m.get("content", "")
-            if isinstance(content, str):
-                content_parts.append(content)
-
-        recent_content = " ".join(content_parts)
-
-        # 检查是否包含不确定性关键词
-        for keyword in self._UNCERTAINTY_KEYWORDS:
-            if keyword in recent_content:
-                logger.debug(f"检测到不确定性关键词: {keyword}")
-                return True
-
-        return False
-
     def _should_trigger_search(self, last_response: str | None = None) -> bool:
-        """综合判断是否应该触发搜索
+        """判断是否应该触发搜索
 
-        优先级：
-        1. AI 主动请求（最高优先级）
-        2. 关键词检测
-        3. 固定间隔（兜底）
+        触发条件（按优先级）：
+        1. AI 主动请求（使用 [搜索: 关键词] 语法）
+        2. 固定间隔（作为兜底）
+
+        AI 通过提示词指导何时使用搜索功能，而不是硬编码规则。
 
         Args:
             last_response: 最近的 AI 响应（用于检测主动请求）
@@ -552,12 +510,7 @@ class ConversationManager:
             logger.info("AI 主动请求搜索")
             return True
 
-        # 2. 关键词检测
-        if self._should_search_by_keywords():
-            logger.info("检测到需要外部信息的关键词")
-            return True
-
-        # 3. 固定间隔兜底（仅在启用搜索时）
+        # 2. 固定间隔兜底（仅在启用搜索时）
         if (
             self.enable_search
             and self.search_interval > 0
