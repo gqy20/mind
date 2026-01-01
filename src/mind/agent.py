@@ -8,13 +8,38 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from anthropic import APIStatusError, AsyncAnthropic
-from anthropic.types import MessageParam
+from anthropic.types import MessageParam, ToolParam
 from rich.console import Console
 
 from mind.logger import get_logger
 
 if TYPE_CHECKING:
     from mind.tools import ToolAgent
+
+
+def _get_tools_schema() -> list[ToolParam]:
+    """获取可用工具的 schema 定义
+
+    Returns:
+        工具 schema 列表，用于 Anthropic Tool Use API
+    """
+    return [
+        ToolParam(
+            name="search_web",
+            description="搜索网络信息，获取最新数据、事实、定义等",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词或问题",
+                    }
+                },
+                "required": ["query"],
+            },
+        )
+    ]
+
 
 console = Console()
 logger = get_logger("mind.agent")
@@ -107,7 +132,7 @@ class Agent:
     async def respond(
         self, messages: list[MessageParam], interrupt: asyncio.Event
     ) -> str | None:
-        """流式响应，支持中断
+        """流式响应，支持中断和 Tool Use API
 
         Args:
             messages: 对话历史
@@ -122,14 +147,18 @@ class Agent:
             return None
 
         response_text = ""
+        tool_use_buffer: list[dict] | None = None
+
         logger.debug(f"智能体 {self.name} 开始响应，历史消息数: {len(messages)}")
 
         try:
+            # 第一轮：生成响应（可能包含工具调用）
             async with self.client.messages.stream(
                 model=self.model,
                 max_tokens=1024,
                 system=self.system_prompt,
                 messages=messages,
+                tools=_get_tools_schema(),  # 传入工具定义
             ) as stream:
                 async for event in stream:
                     # 检查中断
@@ -141,8 +170,104 @@ class Agent:
                         response_text += event.text
                         # 实时打印
                         print(event.text, end="", flush=True)
+
                     elif event.type == "content_block_stop":
                         pass
+
+                    # 检测工具调用
+                    elif event.type == "content_block_start":
+                        if hasattr(event, "content_block") and hasattr(
+                            event.content_block, "type"
+                        ):
+                            if event.content_block.type == "tool_use":
+                                # 开始工具调用，初始化 buffer
+                                if tool_use_buffer is None:
+                                    tool_use_buffer = []
+                                tool_use_buffer.append(
+                                    {
+                                        "type": "tool_use",
+                                        "id": getattr(event.content_block, "id", ""),
+                                        "name": getattr(
+                                            event.content_block, "name", ""
+                                        ),
+                                        "input": getattr(
+                                            event.content_block, "input", {}
+                                        ),
+                                    }
+                                )
+
+                    elif event.type == "tool_use":  # type: ignore[comparison-overlap]
+                        # 收集工具调用信息
+                        if tool_use_buffer is None:
+                            tool_use_buffer = []
+                        tool_use_buffer.append(
+                            {
+                                "type": "tool_use",
+                                "id": event.id if hasattr(event, "id") else "",
+                                "name": event.name if hasattr(event, "name") else "",
+                                "input": event.input if hasattr(event, "input") else {},
+                            }
+                        )
+
+            # 处理工具调用
+            if tool_use_buffer:
+                for tool_call in tool_use_buffer:
+                    if tool_call["name"] == "search_web":
+                        query = tool_call["input"].get("query", "")
+                        if query:
+                            logger.info(f"AI 调用搜索工具: {query}")
+                            print(
+                                f"\n🔍 [搜索] 正在搜索 '{query}'...",
+                                end="",
+                                flush=True,
+                            )
+
+                            # 导入并执行搜索
+                            from mind.tools.search_tool import search_web
+
+                            search_result = await search_web(query, max_results=3)
+
+                            if search_result:
+                                print(" ✅")
+                                logger.info("搜索完成")
+
+                                # 将搜索结果添加到消息历史
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": [
+                                            {
+                                                "type": "tool_use",
+                                                "id": tool_call["id"],
+                                                "name": "search_web",
+                                                "input": {"query": query},
+                                            }
+                                        ],
+                                    }
+                                )
+                                messages.append(
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "tool_result",
+                                                "tool_use_id": tool_call["id"],
+                                                "content": search_result,
+                                            }
+                                        ],
+                                    }
+                                )
+
+                                # 基于工具结果继续生成
+                                print(f"\n[{self.name}]: ", end="", flush=True)
+                                response_text = await self._continue_response(
+                                    messages, interrupt
+                                )
+                            else:
+                                print(" ⚠️ (无结果)")
+                                logger.warning("搜索未返回结果")
+                    else:
+                        logger.warning(f"未知工具: {tool_call['name']}")
 
         except APIStatusError as e:
             # API 状态错误（401, 429, 500 等）
@@ -178,6 +303,44 @@ class Agent:
             return None
 
         logger.debug(f"智能体 {self.name} 响应完成，长度: {len(response_text)}")
+        return response_text
+
+    async def _continue_response(
+        self, messages: list[MessageParam], interrupt: asyncio.Event
+    ) -> str:
+        """基于工具结果继续生成响应
+
+        Args:
+            messages: 包含工具结果的对话历史
+            interrupt: 中断事件
+
+        Returns:
+            继续生成的响应文本
+        """
+        response_text = ""
+
+        try:
+            async with self.client.messages.stream(
+                model=self.model,
+                max_tokens=1024,
+                system=self.system_prompt,
+                messages=messages,
+            ) as stream:
+                async for event in stream:
+                    if interrupt.is_set():
+                        logger.debug(f"智能体 {self.name} 继续响应被中断")
+                        return response_text
+
+                    if event.type == "text":
+                        response_text += event.text
+                        print(event.text, end="", flush=True)
+                    elif event.type == "content_block_stop":
+                        pass
+
+        except Exception as e:
+            logger.exception(f"继续响应出错: {e}")
+            return response_text
+
         return response_text
 
     async def query_tool(
