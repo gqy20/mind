@@ -74,6 +74,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="非交互式模式（自动运行对话）",
     )
+    parser.add_argument(
+        "--test-tools",
+        action="store_true",
+        help="测试工具扩展功能（阶段一）",
+    )
     # 使用 parse_known_args 忽略未知参数（如 pytest 的 -v）
     args, _ = parser.parse_known_args()
 
@@ -92,6 +97,40 @@ async def main():
     args = parse_args()
 
     logger.info("=" * 20 + " 程序启动 " + "=" * 20)
+
+    # 测试工具扩展功能
+    if args.test_tools:
+        print("=" * 60)
+        print("🧪 测试工具扩展功能")
+        print("=" * 60)
+
+        from mind.tools import ToolAgent
+
+        # 测试 1: 代码库分析
+        print("\n[测试 1] 代码库分析...")
+        agent = ToolAgent()
+        result = await agent.analyze_codebase(".")
+
+        if result["success"]:
+            print(f"✅ 成功\n{result['summary']}")
+        else:
+            print(f"❌ 失败: {result['error']}")
+
+        # 测试 2: 文件读取
+        print("\n[测试 2] 文件读取...")
+        result = await agent.read_file_analysis(
+            "src/mind/agent.py", "这个文件的主要功能是什么？"
+        )
+
+        if result["success"]:
+            print(f"✅ 成功\n{result['content']}")
+        else:
+            print(f"❌ 失败: {result['error']}")
+
+        print("\n" + "=" * 60)
+        print("测试完成")
+        print("=" * 60)
+        return
 
     # 检查配置
     if not check_config():
