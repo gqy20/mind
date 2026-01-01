@@ -55,7 +55,7 @@ jobs:
           fi
 
           # 运行对话并输出到文件
-          uv run python -m mind.cli "$TOPIC" --max-turns 10 > /tmp/comment.txt
+          uv run python -m mind.cli "$TOPIC" --non-interactive --max-turns 10 > /tmp/comment.txt
 
           # 使用 gh 发布评论
           gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.txt
