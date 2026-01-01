@@ -55,6 +55,9 @@ class Agent:
     name: str
     system_prompt: str
     client: AsyncAnthropic
+    search_documents: list
+    max_documents: int
+    document_ttl: int
 
     def __init__(
         self,
@@ -79,6 +82,9 @@ class Agent:
         self.name = name
         self.model = model or DEFAULT_MODEL
         self.tool_agent = tool_agent
+        self.search_documents = []
+        self.max_documents = 10
+        self.document_ttl = 5
 
         # 如果有工具，自动在 system_prompt 中添加工具使用说明
         self.system_prompt = self._enhance_prompt_with_tool_instruction(system_prompt)
@@ -357,6 +363,78 @@ class Agent:
             return response_text
 
         return response_text
+
+    def add_document(self, doc: dict) -> None:
+        """添加文档到搜索结果池
+
+        Args:
+            doc: Citations API 格式的文档字典
+        """
+        # 超过最大数量时，移除最旧的文档
+        if len(self.search_documents) >= self.max_documents:
+            self.search_documents.pop(0)
+
+        self.search_documents.append(doc)
+
+    def _format_messages_with_documents(
+        self, messages: list[MessageParam]
+    ) -> list[MessageParam]:
+        """将文档池中的文档合并到消息中
+
+        Args:
+            messages: 原始消息列表
+
+        Returns:
+            合并了文档的消息列表
+        """
+        # 如果文档池为空，直接返回原消息
+        if not self.search_documents:
+            return messages
+
+        # 只处理第一条用户消息（假设这是当前问题）
+        formatted_messages: list[MessageParam] = []
+        for msg in messages:
+            if msg["role"] == "user":
+                # 获取消息内容
+                content = msg.get("content", "")
+
+                # 构建新的内容：文档 + 原内容
+                if isinstance(content, str):
+                    # 字符串转为结构化格式
+                    new_content = [
+                        *self.search_documents,
+                        {"type": "text", "text": content},
+                    ]
+                elif isinstance(content, list):
+                    # 已经是结构化格式，在前面插入文档
+                    new_content = list(self.search_documents) + list(content)
+                else:
+                    new_content = list(self.search_documents)
+
+                formatted_messages.append(
+                    MessageParam(role="user", content=new_content)
+                )
+            else:
+                formatted_messages.append(msg)
+
+        return formatted_messages
+
+    def _cleanup_old_documents(self) -> None:
+        """清理过期的文档
+
+        根据 TTL（存活时间）移除超过保留轮次的文档。
+        文档需要包含 age 字段来跟踪其存在轮次。
+        """
+        if self.document_ttl == 0:
+            # TTL 为 0 表示不清理
+            return
+
+        # 过滤掉超过 TTL 的文档
+        self.search_documents = [
+            doc
+            for doc in self.search_documents
+            if doc.get("age", 0) < self.document_ttl
+        ]
 
     async def query_tool(
         self, question: str, messages: list[MessageParam] | None = None
