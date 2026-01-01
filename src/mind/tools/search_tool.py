@@ -5,7 +5,7 @@
 
 import asyncio
 from datetime import datetime
-from functools import wraps
+from functools import partial, wraps
 
 from ddgs import DDGS
 from loguru import logger
@@ -17,7 +17,9 @@ def _sync_wrapper(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, func, *args, **kwargs)
+        # 使用 partial 处理关键字参数
+        func_with_args = partial(func, *args, **kwargs)
+        return await loop.run_in_executor(None, func_with_args)
 
     return wrapper
 
