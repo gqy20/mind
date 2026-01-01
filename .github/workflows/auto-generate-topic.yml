@@ -1,0 +1,83 @@
+name: Auto Generate Chat Topic
+
+on:
+  # 北京时间晚上11点到早上6点，每小时生成两个话题
+  # 北京时间 = UTC+8，晚上11点 = UTC 15:00，早上6点 = UTC 22:00
+  schedule:
+    - cron: '0 15-22 * * *'
+  # 支持手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  generate_topic:
+    name: Generate Chat Topic and Create Issue
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          version: "latest"
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv sync --extra dev
+
+      - name: Generate topics using Anthropic
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        run: |
+          # 生成两个不同的话题
+          uv run python .github/scripts/generate_topic.py
+          mv /tmp/generated_topic.txt /tmp/topic1.txt
+          uv run python .github/scripts/generate_topic.py
+          mv /tmp/generated_topic.txt /tmp/topic2.txt
+
+      - name: Read generated topics
+        id: read_topics
+        run: |
+          TOPIC1=$(cat /tmp/topic1.txt)
+          TOPIC2=$(cat /tmp/topic2.txt)
+          echo "topic1=$TOPIC1" >> $GITHUB_OUTPUT
+          echo "topic2=$TOPIC2" >> $GITHUB_OUTPUT
+
+      - name: Create issues with generated topics
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const topic1 = '${{ steps.read_topics.outputs.topic1 }}';
+            const topic2 = '${{ steps.read_topics.outputs.topic2 }}';
+
+            // 创建第一个 issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[对话] ${topic1}`,
+              body: topic1,
+              labels: ['chat']
+            });
+
+            // 等待一小段时间避免 rate limit
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // 创建第二个 issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[对话] ${topic2}`,
+              body: topic2,
+              labels: ['chat']
+            });
+
+            console.log(`Created issues: ${topic1}, ${topic2}`);
