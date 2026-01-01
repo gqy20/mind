@@ -460,6 +460,115 @@ class ConversationManager:
 
         return None
 
+    # 搜索请求标记模式
+    _SEARCH_REQUEST_PATTERN = re.compile(r"\[搜索:\s*([^\]]+)\]")
+
+    # 不确定性关键词
+    _UNCERTAINTY_KEYWORDS = [
+        "我不确定",
+        "不清楚",
+        "不确定",
+        "未知",
+        "最新",
+        "当前",
+        "具体数据",
+        "发布时间",
+        "是否已经",
+        "最新进展",
+        "最近消息",
+    ]
+
+    def _has_search_request(self, response: str) -> bool:
+        """检测 AI 响应中是否包含搜索请求
+
+        Args:
+            response: AI 的响应文本
+
+        Returns:
+            是否包含搜索请求
+        """
+        if not response:
+            return False
+        return bool(self._SEARCH_REQUEST_PATTERN.search(response))
+
+    def _extract_search_from_response(self, response: str) -> str | None:
+        """从 AI 响应中提取搜索关键词
+
+        Args:
+            response: AI 的响应文本
+
+        Returns:
+            搜索关键词，如果没有找到返回 None
+        """
+        if not response:
+            return None
+        match = self._SEARCH_REQUEST_PATTERN.search(response)
+        return match.group(1).strip() if match else None
+
+    def _should_search_by_keywords(self) -> bool:
+        """通过关键词检测判断是否需要搜索
+
+        Returns:
+            是否应该触发搜索
+        """
+        # 检查最近的对话内容
+        recent_messages = (
+            self.messages[-3:] if len(self.messages) >= 3 else self.messages
+        )
+
+        # 提取字符串内容并拼接
+        content_parts: list[str] = []
+        for m in recent_messages:
+            content = m.get("content", "")
+            if isinstance(content, str):
+                content_parts.append(content)
+
+        recent_content = " ".join(content_parts)
+
+        # 检查是否包含不确定性关键词
+        for keyword in self._UNCERTAINTY_KEYWORDS:
+            if keyword in recent_content:
+                logger.debug(f"检测到不确定性关键词: {keyword}")
+                return True
+
+        return False
+
+    def _should_trigger_search(self, last_response: str | None = None) -> bool:
+        """综合判断是否应该触发搜索
+
+        优先级：
+        1. AI 主动请求（最高优先级）
+        2. 关键词检测
+        3. 固定间隔（兜底）
+
+        Args:
+            last_response: 最近的 AI 响应（用于检测主动请求）
+
+        Returns:
+            是否应该触发搜索
+        """
+        # 1. 检查 AI 是否主动请求
+        if last_response and self._has_search_request(last_response):
+            logger.info("AI 主动请求搜索")
+            return True
+
+        # 2. 关键词检测
+        if self._should_search_by_keywords():
+            logger.info("检测到需要外部信息的关键词")
+            return True
+
+        # 3. 固定间隔兜底（仅在启用搜索时）
+        if (
+            self.enable_search
+            and self.search_interval > 0
+            and self.turn > 0
+            and self.turn % self.search_interval == 0
+        ):
+            logger.info(f"达到搜索间隔: 第 {self.turn} 轮")
+            return True
+
+        return False
+
     async def _turn(self):
         """执行一轮对话"""
         # 确定当前发言的智能体
@@ -501,13 +610,9 @@ class ConversationManager:
                 print(" ⚠️ (无结果)")
                 logger.warning(f"第 {self.turn} 轮工具调用未返回有效结果")
 
-        # 网络搜索：在特定轮次执行搜索并注入结果
-        if (
-            self.enable_search
-            and self.search_interval > 0
-            and self.turn > 0
-            and self.turn % self.search_interval == 0
-        ):
+        # 智能网络搜索触发（关键词检测 + 固定间隔兜底）
+        # 注意：AI 主动请求的搜索在响应处理之后检测
+        if self._should_trigger_search():
             # 从对话历史中提取搜索关键词
             search_query = self._extract_search_query()
 
@@ -580,6 +685,62 @@ class ConversationManager:
             ]
             for pattern in patterns_to_remove:
                 response = re.sub(pattern, "", response, count=1).lstrip()
+
+            # 检查 AI 响应中是否包含搜索请求（最高优先级）
+            if self._has_search_request(response):
+                # 从响应中提取搜索关键词
+                search_query = self._extract_search_from_response(response)
+
+                if search_query:
+                    logger.info(f"AI 主动请求搜索: {search_query}")
+                    print(
+                        f"\n🔍 [AI 请求] 正在搜索 '{search_query}'...",
+                        end="",
+                        flush=True,
+                    )
+
+                    # 导入搜索函数（避免循环导入）
+                    from mind.tools.search_tool import search_web
+
+                    # 执行搜索
+                    search_result = await search_web(search_query, max_results=3)
+
+                    # 如果搜索返回有效结果，注入到对话历史
+                    if search_result:
+                        print(" ✅")
+                        search_message = cast(
+                            MessageParam,
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"[系统消息 - 网络搜索结果]\n{search_result}"
+                                ),
+                            },
+                        )
+                        self.messages.append(search_message)
+                        self.memory.add_message(
+                            search_message["role"],
+                            cast(str, search_message["content"]),
+                        )
+                        logger.info(
+                            f"AI 请求的搜索结果已注入，当前消息数: {len(self.messages)}"
+                        )
+
+                        # 重新生成响应（基于搜索结果）
+                        print(f"\n[{current_agent.name}]: ", end="", flush=True)
+                        response = await current_agent.respond(
+                            self.messages, self.interrupt
+                        )
+                        if response:
+                            print()  # 换行
+                            # 再次清理角色名前缀
+                            for pattern in patterns_to_remove:
+                                response = re.sub(
+                                    pattern, "", response, count=1
+                                ).lstrip()
+                    else:
+                        print(" ⚠️ (无结果)")
+                        logger.warning("AI 请求的搜索未返回有效结果")
 
             formatted_content = f"[{current_agent.name}]: {response}"
             msg = cast(

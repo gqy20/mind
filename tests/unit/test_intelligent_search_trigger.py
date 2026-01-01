@@ -3,8 +3,6 @@
 这个测试套件验证 AI 主动请求搜索和关键词检测的智能触发机制。
 """
 
-from unittest.mock import patch
-
 import pytest
 
 from mind.agent import Agent
@@ -148,13 +146,11 @@ class TestIntelligentSearchTrigger:
 
         ai_response = "让我查查 [搜索: AI 意识最新研究]"
 
-        with patch.object(agent_a, "respond", return_value=ai_response):
-            with patch("mind.tools.search_tool.search_web", return_value="结果"):
-                # Act
-                need_search = manager._should_trigger_search()
+        # Act - 传入 AI 响应检测搜索请求
+        need_search = manager._should_trigger_search(last_response=ai_response)
 
-                # Assert - AI 请求应该触发
-                assert need_search is True
+        # Assert - AI 请求应该触发
+        assert need_search is True
 
     @pytest.mark.asyncio
     async def test_keyword_trigger_when_no_ai_request(self):
