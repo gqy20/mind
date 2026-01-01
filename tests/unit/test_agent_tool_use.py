@@ -84,8 +84,16 @@ class TestAgentToolUse:
             return mock_stream2
 
         with patch.object(agent.client.messages, "stream", side_effect=side_effect):
+            # Mock _search_sync 返回原始搜索结果
+            mock_results = [
+                {
+                    "title": "GPT-5 未发布",
+                    "href": "https://example.com/gpt5",
+                    "body": "GPT-5 尚未正式发布",
+                }
+            ]
             with patch(
-                "mind.tools.search_tool.search_web", return_value="GPT-5 未发布"
+                "mind.tools.search_tool._search_sync", return_value=mock_results
             ):
                 interrupt = asyncio.Event()
 

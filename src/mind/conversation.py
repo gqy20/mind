@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from anthropic.types import MessageParam
 from rich.console import Console
@@ -24,6 +24,9 @@ from rich.console import Console
 from mind.agent import Agent
 from mind.logger import get_logger
 from mind.memory import MemoryManager
+
+if TYPE_CHECKING:
+    from mind.search_history import SearchHistory
 
 logger = get_logger("mind.conversation")
 
@@ -70,9 +73,25 @@ class ConversationManager:
     enable_search: bool = False
     # 网络搜索间隔（轮数），0 表示禁用自动搜索
     search_interval: int = 5
+    # 搜索历史管理器（每个对话会话独立）
+    search_history: "SearchHistory | None" = field(default=None)
 
     def __post_init__(self):
         """初始化后处理：配置工具智能体"""
+        # 初始化搜索历史（每个会话独立）
+        if self.enable_search:
+            from mind.search_history import SearchHistory
+
+            # 使用时间戳创建会话专属的搜索历史文件
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            history_path = MEMORY_DIR / f"search_history_{timestamp}.json"
+            self.search_history = SearchHistory(file_path=history_path)
+
+            # 为两个智能体设置同一个搜索历史实例
+            self.agent_a.search_history = self.search_history  # type: ignore[assignment]
+            self.agent_b.search_history = self.search_history  # type: ignore[assignment]
+            logger.info(f"搜索历史已初始化: {history_path}")
+
         # 如果启用工具，为两个智能体设置共享的 ToolAgent
         if self.enable_tools:
             from mind.tools import ToolAgent

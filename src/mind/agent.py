@@ -85,6 +85,7 @@ class Agent:
         self.search_documents = []
         self.max_documents = 10
         self.document_ttl = 5
+        self.search_history = None  # 由 ConversationManager 设置
 
         # 如果有工具，自动在 system_prompt 中添加工具使用说明
         self.system_prompt = self._enhance_prompt_with_tool_instruction(system_prompt)
@@ -236,47 +237,82 @@ class Agent:
                             )
 
                             # 导入并执行搜索
-                            from mind.tools.search_tool import search_web
+                            from mind.tools.search_tool import _search_sync
 
-                            search_result = await search_web(query, max_results=3)
+                            # 执行搜索获取原始结果
+                            raw_results = await _search_sync(query, max_results=3)
 
-                            if search_result:
+                            if raw_results:
                                 print(" ✅")
                                 logger.info("搜索完成")
 
-                                # 将搜索结果添加到消息历史
-                                messages.append(
-                                    {
-                                        "role": "assistant",
-                                        "content": [
-                                            {
-                                                "type": "tool_use",
-                                                "id": tool_call["id"],
-                                                "name": "search_web",
-                                                "input": {"query": query},
-                                            }
-                                        ],
-                                    }
-                                )
-                                messages.append(
-                                    {
-                                        "role": "user",
-                                        "content": [
-                                            {
-                                                "type": "tool_result",
-                                                "tool_use_id": tool_call["id"],
-                                                "content": search_result,
-                                            }
-                                        ],
-                                    }
-                                )
+                                # 如果有 search_history，保存结果并转换为 Citations 文档
+                                if self.search_history:
+                                    # 保存搜索结果到历史
+                                    self.search_history.save_search(query, raw_results)
 
-                                # 基于工具结果继续生成
-                                # 重新打印角色名，因为搜索输出打断了对话
-                                print(f"\n[{self.name}]: ", end="", flush=True)
-                                response_text = await self._continue_response(
-                                    messages, interrupt
-                                )
+                                    # 获取最新的搜索记录（包括当前这次）
+                                    latest_searches = self.search_history.get_latest(
+                                        limit=3
+                                    )
+
+                                    # 转换为 Citations 文档
+                                    doc = self._convert_searches_to_document(
+                                        latest_searches
+                                    )
+
+                                    # 添加到文档池
+                                    self.add_document(doc)
+
+                                    # 使用包含文档的格式化消息重新调用
+                                    formatted_messages = (
+                                        self._format_messages_with_documents(messages)
+                                    )
+
+                                    print(f"\n[{self.name}]: ", end="", flush=True)
+                                    response_text = await self._continue_response(
+                                        formatted_messages, interrupt
+                                    )
+                                else:
+                                    # 回退到原始流程（无 SearchHistory）
+                                    from mind.tools.search_tool import search_web
+
+                                    search_result = await search_web(
+                                        query, max_results=3
+                                    )
+
+                                    # 将搜索结果添加到消息历史
+                                    messages.append(
+                                        {
+                                            "role": "assistant",
+                                            "content": [
+                                                {
+                                                    "type": "tool_use",
+                                                    "id": tool_call["id"],
+                                                    "name": "search_web",
+                                                    "input": {"query": query},
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    messages.append(
+                                        {
+                                            "role": "user",
+                                            "content": [
+                                                {
+                                                    "type": "tool_result",
+                                                    "tool_use_id": tool_call["id"],
+                                                    "content": search_result or "",
+                                                }
+                                            ],
+                                        }
+                                    )
+
+                                    # 基于工具结果继续生成
+                                    print(f"\n[{self.name}]: ", end="", flush=True)
+                                    response_text = await self._continue_response(
+                                        messages, interrupt
+                                    )
                             else:
                                 print(" ⚠️ (无结果)")
                                 logger.warning("搜索未返回结果")
@@ -375,6 +411,51 @@ class Agent:
             self.search_documents.pop(0)
 
         self.search_documents.append(doc)
+
+    def _convert_searches_to_document(self, search_entries: list[dict]) -> dict:
+        """将搜索历史记录转换为 Citations 文档
+
+        Args:
+            search_entries: 搜索记录列表（来自 SearchHistory）
+
+        Returns:
+            Citations API 文档格式的字典
+        """
+        content_blocks = []
+
+        for entry in search_entries:
+            query = entry.get("query", "未知查询")
+            results = entry.get("results", [])
+
+            # 为每个搜索结果添加标题分隔
+            if results:
+                content_blocks.append({"type": "text", "text": f"\n## 搜索: {query}"})
+                for result in results:
+                    title = result.get("title", "无标题")
+                    href = result.get("href", "")
+                    body = result.get("body", "")
+
+                    block_parts = [title]
+                    if href:
+                        block_parts.append(f"来源: {href}")
+                    if body:
+                        short_body = body[:200] + "..." if len(body) > 200 else body
+                        block_parts.append(f"内容: {short_body}")
+
+                    content_blocks.append(
+                        {"type": "text", "text": "\n".join(block_parts)}
+                    )
+
+        return {
+            "type": "document",
+            "source": {
+                "type": "content",
+                "content": content_blocks,
+            },
+            "title": "搜索历史记录",
+            "context": f"包含 {len(search_entries)} 次搜索结果",
+            "citations": {"enabled": True},
+        }
 
     def _merge_documents_with_content(self, content: object) -> list[object]:
         """将文档池与消息内容合并
