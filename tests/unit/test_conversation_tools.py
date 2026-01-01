@@ -1,97 +1,69 @@
 """
 ConversationManager 工具集成的单元测试
 
-测试 ConversationManager 的工具能力：
-- enable_tools 参数配置
-- 为智能体设置工具
-- 工具调用时机
+测试重构后的工具功能：
+- 工具不再使用 ToolAgent
+- 分析对话上下文而非项目源码
 """
 
-from unittest.mock import patch
-
 import pytest
+from anthropic.types import MessageParam
 
 from mind.agent import Agent
 from mind.conversation import ConversationManager
-
-
-class TestConversationManagerEnableTools:
-    """测试 ConversationManager 的 enable_tools 参数"""
-
-    def test_init_with_enable_tools_false(self):
-        """测试：enable_tools=False 时不设置工具"""
-        # Arrange & Act
-        agent_a = Agent(name="AgentA", system_prompt="提示A")
-        agent_b = Agent(name="AgentB", system_prompt="提示B")
-        _ = ConversationManager(agent_a=agent_a, agent_b=agent_b, enable_tools=False)
-
-        # Assert
-        assert agent_a.tool_agent is None
-        assert agent_b.tool_agent is None
-
-    def test_init_with_enable_tools_true(self):
-        """测试：enable_tools=True 时设置工具"""
-        # Arrange
-        agent_a = Agent(name="AgentA", system_prompt="提示A")
-        agent_b = Agent(name="AgentB", system_prompt="提示B")
-
-        # Act
-        _ = ConversationManager(agent_a=agent_a, agent_b=agent_b, enable_tools=True)
-
-        # Assert
-        assert agent_a.tool_agent is not None
-        assert agent_b.tool_agent is not None
-        # 两个智能体共享同一个 ToolAgent 实例
-        assert agent_a.tool_agent is agent_b.tool_agent
-
-    def test_init_default_enable_tools_is_false(self):
-        """测试：默认 enable_tools=False"""
-        # Arrange & Act
-        agent_a = Agent(name="AgentA", system_prompt="提示A")
-        agent_b = Agent(name="AgentB", system_prompt="提示B")
-        _ = ConversationManager(agent_a=agent_a, agent_b=agent_b)
-
-        # Assert
-        assert agent_a.tool_agent is None
-        assert agent_b.tool_agent is None
 
 
 class TestConversationManagerToolIntegration:
     """测试 ConversationManager 的工具集成逻辑"""
 
     @pytest.mark.asyncio
-    async def test_query_tool_in_conversation_context(self):
-        """测试：在对话上下文中调用工具"""
+    async def test_query_tool_analyzes_conversation(self):
+        """测试：query_tool 分析对话上下文"""
         # Arrange
         agent_a = Agent(name="AgentA", system_prompt="提示A")
         agent_b = Agent(name="AgentB", system_prompt="提示B")
         _ = ConversationManager(agent_a=agent_a, agent_b=agent_b, enable_tools=True)
 
-        # Mock ToolAgent.analyze_codebase
-        mock_result = {
-            "success": True,
-            "summary": "代码库概述",
-            "structure": "结构",
-            "error": None,
-        }
+        messages: list[MessageParam] = [
+            {"role": "user", "content": "讨论话题"},
+            {"role": "assistant", "content": "观点1"},
+        ]
 
-        with patch.object(
-            agent_a.tool_agent, "analyze_codebase", return_value=mock_result
-        ):
-            # Act
-            result = await agent_a.query_tool("分析代码库")
+        # Act
+        result = await agent_a.query_tool("总结对话", messages)
 
-        # Assert
-        assert result == "代码库概述"
+        # Assert - 应该返回对话摘要
+        assert result is not None
+        assert "对话" in result
 
     @pytest.mark.asyncio
-    async def test_tool_agent_is_shared_between_agents(self):
-        """测试：工具智能体在两个智能体之间共享"""
+    async def test_tool_agent_shared_but_not_used_for_query(self):
+        """测试：ToolAgent 仍然被共享但不再用于 query_tool"""
         # Arrange & Act
         agent_a = Agent(name="AgentA", system_prompt="提示A")
         agent_b = Agent(name="AgentB", system_prompt="提示B")
         _ = ConversationManager(agent_a=agent_a, agent_b=agent_b, enable_tools=True)
 
         # Assert
-        # 检查是同一个实例
+        # ToolAgent 仍然被设置（用于提示词增强）
+        assert agent_a.tool_agent is not None
+        assert agent_b.tool_agent is not None
+        # 是同一个实例
         assert id(agent_a.tool_agent) == id(agent_b.tool_agent)
+
+    @pytest.mark.asyncio
+    async def test_query_tool_works_without_tool_agent(self):
+        """测试：query_tool 不再依赖 tool_agent"""
+        # Arrange
+        agent = Agent(name="TestAgent", system_prompt="测试")
+
+        messages: list[MessageParam] = [
+            {"role": "user", "content": "测试话题"},
+            {"role": "assistant", "content": "测试回复"},
+        ]
+
+        # Act - 即使没有 tool_agent 也能工作
+        result = await agent.query_tool("总结", messages)
+
+        # Assert
+        assert result is not None

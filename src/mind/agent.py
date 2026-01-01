@@ -180,36 +180,88 @@ class Agent:
         logger.debug(f"智能体 {self.name} 响应完成，长度: {len(response_text)}")
         return response_text
 
-    async def query_tool(self, question: str) -> str | None:
-        """使用工具查询信息
+    async def query_tool(
+        self, question: str, messages: list[MessageParam] | None = None
+    ) -> str | None:
+        """分析对话上下文，提取关键信息
 
         Args:
-            question: 查询问题（当前仅支持代码库分析）
+            question: 查询问题（如"总结当前对话"、"提取主要观点"）
+            messages: 对话历史记录
 
         Returns:
-            工具返回的结果摘要，如果没有配置工具或查询失败则返回 None
+            对话摘要，如果对话为空或分析失败则返回 None
         """
-        # 如果没有配置 tool_agent，返回 None
-        if self.tool_agent is None:
-            logger.debug(f"智能体 {self.name} 没有配置工具，跳过工具查询")
+        # 空对话返回 None
+        if not messages:
+            logger.debug(f"智能体 {self.name} 对话历史为空")
             return None
 
         try:
-            # 调用 ToolAgent 的代码库分析方法
-            result = await self.tool_agent.analyze_codebase(".")
+            # 提取对话内容
+            conversation_parts = []
+            user_topics = []
+            assistant_responses = []
 
-            # 检查结果是否成功
-            if result.get("success"):
-                summary = result.get("summary", "")
-                logger.info(f"智能体 {self.name} 工具查询成功")
-                return summary if isinstance(summary, str) else None
-            else:
-                # 工具调用失败
-                error = result.get("error", "未知错误")
-                logger.warning(f"智能体 {self.name} 工具查询失败: {error}")
+            for msg in messages:
+                # 使用显式类型注解避免 mypy 类型窄化
+                role: str = msg.get("role", "")
+                content = msg.get("content", "")
+
+                # 跳过系统消息和空内容
+                if role == "system" or not content:
+                    continue
+
+                # 处理不同类型的内容
+                if isinstance(content, str):
+                    text = content
+                else:
+                    # 处理结构化内容（blocks）
+                    text = str(content)
+
+                conversation_parts.append(text)
+
+                # 收集用户话题和助手回复
+                if role == "user":
+                    # 提取话题（去除前缀）
+                    clean_text = text.strip()
+                    if clean_text:
+                        user_topics.append(clean_text)
+                elif role == "assistant":
+                    clean_text = text.strip()
+                    if clean_text:
+                        assistant_responses.append(clean_text)
+
+            # 如果没有有效对话内容，返回 None
+            if not conversation_parts:
+                logger.debug(f"智能体 {self.name} 没有有效对话内容")
                 return None
+
+            # 构建摘要
+            summary_parts = []
+
+            # 1. 话题概述
+            if user_topics:
+                first_topic = user_topics[0][:100]  # 限制长度
+                summary_parts.append(f"**对话话题**: {first_topic}")
+
+            # 2. 对话统计
+            summary_parts.append(f"**对话轮次**: {len(assistant_responses)} 轮交流")
+
+            # 3. 最近的观点（取最后 3 条，如果有的话）
+            if assistant_responses:
+                recent_responses = assistant_responses[-3:]
+                summary_parts.append("\n**主要观点**:")
+                for i, resp in enumerate(recent_responses, 1):
+                    # 截取前 150 字符
+                    short_resp = resp[:150] + "..." if len(resp) > 150 else resp
+                    summary_parts.append(f"  {i}. {short_resp}")
+
+            result = "\n".join(summary_parts)
+            logger.info(f"智能体 {self.name} 对话分析完成，摘要长度: {len(result)}")
+            return result
 
         except Exception as e:
             # 捕获所有异常，返回 None
-            logger.error(f"智能体 {self.name} 工具查询异常: {e}", exc_info=True)
+            logger.error(f"智能体 {self.name} 对话分析异常: {e}", exc_info=True)
             return None

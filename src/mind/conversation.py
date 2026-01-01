@@ -406,13 +406,13 @@ class ConversationManager:
         ):
             logger.info(f"第 {self.turn} 轮：调用工具获取上下文")
             print(
-                f"\n🔧 [工具调用] 第 {self.turn} 轮：正在分析代码库...",
+                f"\n🔧 [工具调用] 第 {self.turn} 轮：正在分析对话历史...",
                 end="",
                 flush=True,
             )
 
-            # 调用当前智能体的工具
-            tool_result = await current_agent.query_tool("分析代码库")
+            # 调用当前智能体的工具，传入对话历史
+            tool_result = await current_agent.query_tool("总结当前对话", self.messages)
 
             # 如果工具返回有效结果，注入到对话历史
             if tool_result:

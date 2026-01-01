@@ -151,8 +151,14 @@ class TestToolInjectionInTurn:
         # Act
         await manager._turn()
 
-        # Assert - 应该调用 query_tool
-        agent_a.query_tool.assert_called_once_with("分析代码库")
+        # Assert - 应该调用 query_tool，传入 messages
+        agent_a.query_tool.assert_called_once()
+        # 检查调用参数
+        call_args = agent_a.query_tool.call_args
+        assert call_args[0][0] == "总结当前对话"  # question 参数
+        # messages 是第二个位置参数
+        assert len(call_args[0]) == 2  # question 和 messages
+        assert call_args[0][1] is not None  # messages 不为 None
 
     @pytest.mark.asyncio
     async def test_tool_result_injected_to_messages(self):
@@ -161,8 +167,8 @@ class TestToolInjectionInTurn:
         agent_a = MagicMock(spec=Agent)
         agent_a.name = "AgentA"
         agent_a.respond = AsyncMock(return_value="响应")
-        # Mock query_tool 方法返回工具结果
-        agent_a.query_tool = AsyncMock(return_value="代码库分析结果")
+        # Mock query_tool 方法返回对话摘要
+        agent_a.query_tool = AsyncMock(return_value="对话摘要")
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -182,7 +188,7 @@ class TestToolInjectionInTurn:
         tool_message = manager.messages[-2]
         assert tool_message["role"] == "user"
         assert "上下文更新" in tool_message["content"]
-        assert "代码库分析结果" in tool_message["content"]
+        assert "对话摘要" in tool_message["content"]
 
     @pytest.mark.asyncio
     async def test_tool_result_saved_to_memory(self):
@@ -191,8 +197,8 @@ class TestToolInjectionInTurn:
         agent_a = MagicMock(spec=Agent)
         agent_a.name = "AgentA"
         agent_a.respond = AsyncMock(return_value="响应")
-        # Mock query_tool 方法返回工具结果
-        agent_a.query_tool = AsyncMock(return_value="代码库分析结果")
+        # Mock query_tool 方法返回对话摘要
+        agent_a.query_tool = AsyncMock(return_value="对话摘要")
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
