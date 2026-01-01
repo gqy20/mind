@@ -84,6 +84,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="启用工具扩展能力（代码分析、文件读取等）",
     )
+    parser.add_argument(
+        "--tool-interval",
+        type=int,
+        default=5,
+        help="工具调用间隔（轮数），默认 5，0 表示禁用自动调用",
+    )
     # 使用 parse_known_args 忽略未知参数（如 pytest 的 -v）
     args, _ = parser.parse_known_args()
 
@@ -166,6 +172,7 @@ async def main():
         agent_b=challenger,
         turn_interval=1.0,
         enable_tools=args.with_tools,
+        tool_interval=args.tool_interval,
     )
 
     # 获取主题
