@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: mypy
         name: MyPy
-        entry: uv run mypy src/mind
+        entry: uv run python -m mypy src/mind
         language: system
         types_or: [python]
         pass_filenames: false

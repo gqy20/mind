@@ -183,6 +183,8 @@ class ToolAgent:
         except Exception as e:
             logger.error(f"ToolAgent 执行异常: {e}", exc_info=True)
             raise ToolAgentError(f"工具执行失败: {e}") from e
+        # 此处不可达 (mypy 控制流分析需要)
+        raise AssertionError("unreachable")  # noqa: F901
 
     def _extract_structure(self, analysis: str) -> str:
         """从分析结果中提取目录结构

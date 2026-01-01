@@ -109,23 +109,23 @@ async def main():
         # 测试 1: 代码库分析
         print("\n[测试 1] 代码库分析...")
         agent = ToolAgent()
-        result = await agent.analyze_codebase(".")
+        analyze_result = await agent.analyze_codebase(".")
 
-        if result["success"]:
-            print(f"✅ 成功\n{result['summary']}")
+        if analyze_result["success"]:
+            print(f"✅ 成功\n{analyze_result['summary']}")
         else:
-            print(f"❌ 失败: {result['error']}")
+            print(f"❌ 失败: {analyze_result['error']}")
 
         # 测试 2: 文件读取
         print("\n[测试 2] 文件读取...")
-        result = await agent.read_file_analysis(
+        file_result = await agent.read_file_analysis(
             "src/mind/agent.py", "这个文件的主要功能是什么？"
         )
 
-        if result["success"]:
-            print(f"✅ 成功\n{result['content']}")
+        if file_result["success"]:
+            print(f"✅ 成功\n{file_result['content']}")
         else:
-            print(f"❌ 失败: {result['error']}")
+            print(f"❌ 失败: {file_result['error']}")
 
         print("\n" + "=" * 60)
         print("测试完成")

@@ -31,7 +31,7 @@ class TestParseArgsTestTools:
     def test_parse_args_without_test_tools_flag(self):
         """测试：不含 --test-tools 时默认为 False"""
         # Arrange & Act
-        args = parse_args()
+        parse_args()
 
         # Assert
         # 如果功能未实现，这个属性可能不存在
@@ -57,6 +57,7 @@ class TestTestToolsCommand:
 
             # Act
             from mind.tools.tool_agent import ToolAgent
+
             agent = ToolAgent()
             result = await agent.analyze_codebase(".")
 
@@ -80,6 +81,7 @@ class TestTestToolsCommand:
 
             # Act
             from mind.tools.tool_agent import ToolAgent
+
             agent = ToolAgent()
             result = await agent.read_file_analysis(
                 "src/mind/agent.py", "这个文件做什么？"
@@ -105,6 +107,7 @@ class TestTestToolsCommand:
 
             # Act
             from mind.tools.tool_agent import ToolAgent
+
             agent = ToolAgent()
             result = await agent.analyze_codebase(".")
 
