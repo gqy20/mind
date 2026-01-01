@@ -2,7 +2,14 @@ name: Issue Chat
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened]
+  # 也可以通过手动触发
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue 编号
+        required: true
+        type: number
 
 permissions:
   contents: write
