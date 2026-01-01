@@ -4,6 +4,7 @@
 """
 
 import asyncio
+from datetime import datetime
 from functools import wraps
 
 from ddgs import DDGS
@@ -74,4 +75,82 @@ async def search_web(query: str, max_results: int = 5) -> str | None:
 
     except Exception as e:
         logger.error(f"搜索失败: {query}, 错误: {e}")
+        return None
+
+
+async def search_web_as_document(query: str, max_results: int = 5) -> dict | None:
+    """搜索网络并返回 Citations API 文档格式
+
+    将搜索结果转换为 Anthropic Citations API 所需的 document 格式，
+    支持精确定位引用。
+
+    Args:
+        query: 搜索查询字符串
+        max_results: 最大结果数量，默认 5
+
+    Returns:
+        Citations API document 格式的字典，如果失败返回 None：
+        {
+            "type": "document",
+            "source": {
+                "type": "content",
+                "content": [
+                    {"type": "text", "text": "结果1"},
+                    {"type": "text", "text": "结果2"}
+                ]
+            },
+            "title": "搜索结果: {query}",
+            "context": "搜索时间: ...",
+            "citations": {"enabled": True}
+        }
+    """
+    # 处理空查询
+    if not query or not query.strip():
+        logger.warning("搜索查询为空")
+        return None
+
+    try:
+        # 执行搜索
+        results = await _search_sync(query, max_results)
+
+        if not results:
+            logger.warning(f"搜索未返回结果: {query}")
+            return None
+
+        # 转换为 content blocks（每个搜索结果作为一个可引用的块）
+        content_blocks = []
+        for r in results[:max_results]:
+            title = r.get("title", "无标题")
+            href = r.get("href", "")
+            body = r.get("body", "")
+
+            # 构建块文本
+            block_parts = [title]
+            if href:
+                block_parts.append(f"来源: {href}")
+            if body:
+                # 限制摘要长度
+                short_body = body[:200] + "..." if len(body) > 200 else body
+                block_parts.append(f"内容: {short_body}")
+
+            block_text = "\n".join(block_parts)
+            content_blocks.append({"type": "text", "text": block_text})
+
+        # 构建文档结构
+        document = {
+            "type": "document",
+            "source": {
+                "type": "content",
+                "content": content_blocks,
+            },
+            "title": f"搜索结果: {query}",
+            "context": f"搜索时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "citations": {"enabled": True},
+        }
+
+        logger.info(f"搜索文档创建完成: {query}, {len(content_blocks)} 个内容块")
+        return document
+
+    except Exception as e:
+        logger.error(f"搜索文档创建失败: {query}, 错误: {e}")
         return None
