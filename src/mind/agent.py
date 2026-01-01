@@ -168,6 +168,7 @@ class Agent:
 
         response_text = ""
         tool_use_buffer: list[dict] | None = None
+        citations_buffer: list[dict] = []
 
         logger.debug(f"智能体 {self.name} 开始响应，历史消息数: {len(messages)}")
 
@@ -205,6 +206,44 @@ class Agent:
                         response_text += text
                         # 实时打印
                         print(text, end="", flush=True)
+
+                    elif event.type == "content_block_delta":
+                        # 处理内容块增量事件（可能包含引用增量）
+                        if hasattr(event, "delta") and hasattr(event.delta, "type"):
+                            delta_type = event.delta.type
+
+                            # 处理文本增量
+                            if delta_type == "text_delta":
+                                text = getattr(event.delta, "text", "")
+                                # 清理角色名前缀
+                                if text.startswith(f"[{self.name}]:"):
+                                    text = text[len(f"[{self.name}]:") :].lstrip()
+                                elif text.startswith(f"{self.name}:"):
+                                    text = text[len(f"{self.name}:") :].lstrip()
+
+                                response_text += text
+                                print(text, end="", flush=True)
+
+                            # 处理引用增量
+                            elif delta_type == "citations_delta":
+                                # 捕获引用信息
+                                if hasattr(event.delta, "citations"):
+                                    for citation in event.delta.citations:
+                                        citations_buffer.append(
+                                            {
+                                                "type": getattr(
+                                                    citation, "type", "unknown"
+                                                ),
+                                                "document_title": getattr(
+                                                    citation,
+                                                    "document_title",
+                                                    "未知来源",
+                                                ),
+                                                "cited_text": getattr(
+                                                    citation, "cited_text", ""
+                                                ),
+                                            }
+                                        )
 
                     elif event.type == "content_block_stop":
                         # 在 content_block_stop 时，工具调用的 input 已完全构建
@@ -364,6 +403,10 @@ class Agent:
             logger.exception(f"未知错误: {self.name}, 错误: {e}")
             console.print(f"\n[red]❌ 未知错误：{e}[/red]")
             return None
+
+        # 显示引用列表（如果有）
+        if citations_buffer:
+            self._display_citations(citations_buffer)
 
         logger.debug(f"智能体 {self.name} 响应完成，长度: {len(response_text)}")
         return response_text
@@ -536,6 +579,46 @@ class Agent:
             for doc in self.search_documents
             if doc.get("age", 0) < self.document_ttl
         ]
+
+    def _display_citations(self, citations: list[dict]) -> None:
+        """显示引用列表
+
+        Args:
+            citations: 引用信息列表
+        """
+        if not citations:
+            return
+
+        # 去重（相同的文档标题和引用文本只显示一次）
+        unique_citations = []
+        seen = set()
+        for citation in citations:
+            key = (
+                citation.get("document_title", ""),
+                citation.get("cited_text", "")[:100],
+            )
+            if key not in seen:
+                seen.add(key)
+                unique_citations.append(citation)
+
+        # 使用 Rich 格式化输出
+        console.print()
+        console.print(f"[dim]─ {'─' * 70}[/dim]")  # 分隔线
+        console.print("[cyan]📚 引用来源：[/cyan]")
+
+        for i, citation in enumerate(unique_citations, 1):
+            title = citation.get("document_title", "未知来源")
+            cited_text = citation.get("cited_text", "")
+
+            # 限制引用文本长度
+            if len(cited_text) > 150:
+                cited_text = cited_text[:147] + "..."
+
+            console.print(f"[dim][{i}][/dim] [yellow]{title}[/yellow]")
+            if cited_text:
+                console.print(f"    [dim]{cited_text}[/dim]")
+
+        console.print()
 
     async def query_tool(
         self, question: str, messages: list[MessageParam] | None = None
