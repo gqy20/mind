@@ -56,7 +56,7 @@ class TestConversationSearchIntegration:
 
         # Mock 响应和搜索
         with patch.object(agent_a, "respond", return_value="[A]: AI 可能没有意识"):
-            with patch("mind.conversation.search_web") as mock_search:
+            with patch("mind.tools.search_tool.search_web") as mock_search:
                 mock_search.return_value = "**网络搜索结果**: AI 意识\n1. 一些结果"
 
                 # 设置为第 2 轮
@@ -87,7 +87,7 @@ class TestConversationSearchIntegration:
         search_result = "**网络搜索结果**: AI\n1. 测试结果"
 
         with patch.object(agent_a, "respond", return_value="[A]: 回复"):
-            with patch("mind.conversation.search_web", return_value=search_result):
+            with patch("mind.tools.search_tool.search_web", return_value=search_result):
                 manager.turn = 2
 
                 # Act
@@ -96,10 +96,10 @@ class TestConversationSearchIntegration:
                 # Assert
                 # 应该添加搜索结果消息
                 assert len(manager.messages) > initial_count
-                # 最后一条消息应该是搜索结果
-                last_msg = manager.messages[-1]
-                assert last_msg["role"] == "user"
-                assert "网络搜索" in last_msg["content"]
+                # 搜索结果应该在倒数第二条（最后是智能体响应）
+                search_msg = manager.messages[-2]
+                assert search_msg["role"] == "user"
+                assert "网络搜索" in search_msg["content"]
 
     @pytest.mark.asyncio
     async def test_search_not_called_when_disabled(self):
@@ -115,7 +115,7 @@ class TestConversationSearchIntegration:
         manager.messages.append({"role": "user", "content": "讨论 AI"})
 
         with patch.object(agent_a, "respond", return_value="[A]: 回复"):
-            with patch("mind.conversation.search_web") as mock_search:
+            with patch("mind.tools.search_tool.search_web") as mock_search:
                 manager.turn = 2
 
                 # Act
@@ -143,7 +143,7 @@ class TestConversationSearchIntegration:
         ]
 
         with patch.object(agent_a, "respond", return_value="[A]: 继续"):
-            with patch("mind.conversation.search_web") as mock_search:
+            with patch("mind.tools.search_tool.search_web") as mock_search:
                 mock_search.return_value = "搜索结果"
                 manager.turn = 2
 

@@ -66,6 +66,10 @@ class ConversationManager:
     enable_tools: bool = False
     # 工具调用间隔（轮数），0 表示禁用自动调用
     tool_interval: int = 5
+    # 是否启用网络搜索（默认不启用）
+    enable_search: bool = False
+    # 网络搜索间隔（轮数），0 表示禁用自动搜索
+    search_interval: int = 5
 
     def __post_init__(self):
         """初始化后处理：配置工具智能体"""
@@ -412,6 +416,50 @@ class ConversationManager:
             logger.debug("输入监听任务被取消")
             raise
 
+    def _extract_search_query(self) -> str | None:
+        """从对话历史中提取搜索关键词
+
+        Returns:
+            搜索关键词，如果无法提取返回 None
+        """
+        # 如果没有对话历史，返回 None
+        if not self.messages:
+            return None
+
+        # 优先使用最近的用户消息
+        for msg in reversed(self.messages):
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    # 简单清理：去除明显的对话标记
+                    # 移除 / 命令前缀
+                    clean_query = content.strip()
+                    # 移除常见的命令前缀
+                    for prefix in ["/quit", "/exit", "/clear"]:
+                        if clean_query.startswith(prefix):
+                            clean_query = ""
+                            break
+
+                    if clean_query:
+                        # 限制关键词长度
+                        return clean_query[:100]
+
+        # 如果没有用户消息，使用对话主题
+        if self.topic:
+            return self.topic[:100]
+
+        # 从最近的助手回复中提取关键词
+        for msg in reversed(self.messages):
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    # 简单提取：取前几个有意义的词
+                    words = content.strip().split()[:5]
+                    if words:
+                        return " ".join(words)[:100]
+
+        return None
+
     async def _turn(self):
         """执行一轮对话"""
         # 确定当前发言的智能体
@@ -452,6 +500,51 @@ class ConversationManager:
             else:
                 print(" ⚠️ (无结果)")
                 logger.warning(f"第 {self.turn} 轮工具调用未返回有效结果")
+
+        # 网络搜索：在特定轮次执行搜索并注入结果
+        if (
+            self.enable_search
+            and self.search_interval > 0
+            and self.turn > 0
+            and self.turn % self.search_interval == 0
+        ):
+            # 从对话历史中提取搜索关键词
+            search_query = self._extract_search_query()
+
+            if search_query:
+                logger.info(f"第 {self.turn} 轮：触发网络搜索")
+                print(
+                    f"\n🌐 [网络搜索] 第 {self.turn} 轮：正在搜索 '{search_query}'...",
+                    end="",
+                    flush=True,
+                )
+
+                # 导入搜索函数（避免循环导入）
+                from mind.tools.search_tool import search_web
+
+                # 执行搜索
+                search_result = await search_web(search_query, max_results=3)
+
+                # 如果搜索返回有效结果，注入到对话历史
+                if search_result:
+                    print(" ✅")
+                    search_message = cast(
+                        MessageParam,
+                        {
+                            "role": "user",
+                            "content": f"[系统消息 - 网络搜索结果]\n{search_result}",
+                        },
+                    )
+                    self.messages.append(search_message)
+                    self.memory.add_message(
+                        search_message["role"], cast(str, search_message["content"])
+                    )
+                    logger.info(
+                        f"搜索结果已注入对话历史，当前消息数: {len(self.messages)}"
+                    )
+                else:
+                    print(" ⚠️ (无结果)")
+                    logger.warning(f"第 {self.turn} 轮网络搜索未返回有效结果")
 
         # 打印智能体名称（换行以避免覆盖进度条）
         print(f"\n[{current_agent.name}]: ", end="", flush=True)
