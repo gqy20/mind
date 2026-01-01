@@ -167,9 +167,17 @@ class Agent:
                         return None
 
                     if event.type == "text":
-                        response_text += event.text
+                        # 实时清理角色名前缀（如果 AI 误添加了）
+                        text = event.text
+                        # 移除常见的角色名前缀格式
+                        if text.startswith(f"[{self.name}]:"):
+                            text = text[len(f"[{self.name}]:") :].lstrip()
+                        elif text.startswith(f"{self.name}:"):
+                            text = text[len(f"{self.name}:") :].lstrip()
+
+                        response_text += text
                         # 实时打印
-                        print(event.text, end="", flush=True)
+                        print(text, end="", flush=True)
 
                     elif event.type == "content_block_stop":
                         pass
@@ -259,6 +267,7 @@ class Agent:
                                 )
 
                                 # 基于工具结果继续生成
+                                # 重新打印角色名，因为搜索输出打断了对话
                                 print(f"\n[{self.name}]: ", end="", flush=True)
                                 response_text = await self._continue_response(
                                     messages, interrupt
@@ -332,8 +341,15 @@ class Agent:
                         return response_text
 
                     if event.type == "text":
-                        response_text += event.text
-                        print(event.text, end="", flush=True)
+                        # 实时清理角色名前缀（如果 AI 误添加了）
+                        text = event.text
+                        if text.startswith(f"[{self.name}]:"):
+                            text = text[len(f"[{self.name}]:") :].lstrip()
+                        elif text.startswith(f"{self.name}:"):
+                            text = text[len(f"{self.name}:") :].lstrip()
+
+                        response_text += text
+                        print(text, end="", flush=True)
                     elif event.type == "content_block_stop":
                         pass
 
