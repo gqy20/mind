@@ -169,6 +169,7 @@ class Agent:
         response_text = ""
         tool_use_buffer: list[dict] | None = None
         citations_buffer: list[dict] = []
+        has_text_delta = False  # 标记是否处理过 text_delta
 
         logger.debug(f"智能体 {self.name} 开始响应，历史消息数: {len(messages)}")
 
@@ -184,11 +185,8 @@ class Agent:
                 event_count = 0
                 async for event in stream:
                     event_count += 1
-                    # 每 50 个事件记录一次（避免日志过多）
-                    if event_count % 50 == 0:
-                        logger.debug(
-                            f"已处理 {event_count} 个事件，最新事件类型: {event.type}"
-                        )
+                    # 记录每个事件类型（用于调试）
+                    logger.debug(f"事件 #{event_count}: {event.type}")
                     # 检查中断
                     if interrupt.is_set():
                         logger.debug(f"智能体 {self.name} 响应中途被中断")
@@ -201,6 +199,7 @@ class Agent:
 
                             # 处理文本增量
                             if delta_type == "text_delta":
+                                has_text_delta = True  # 标记已处理增量
                                 text = getattr(event.delta, "text", "")
                                 # 清理角色名前缀
                                 if text.startswith(f"[{self.name}]:"):
@@ -232,8 +231,9 @@ class Agent:
                                             }
                                         )
 
-                    # 处理 text 事件（旧格式，用于测试兼容）
-                    elif event.type == "text":
+                    # 处理 text 事件（旧格式）
+                    # 只在没有处理过 text_delta 时才处理，避免重复
+                    elif event.type == "text" and not has_text_delta:
                         text = getattr(event, "text", "")
                         # 清理角色名前缀
                         if text.startswith(f"[{self.name}]:"):
@@ -423,6 +423,8 @@ class Agent:
             继续生成的响应文本
         """
         response_text = ""
+        has_text_delta = False  # 标记是否处理过 text_delta
+        citations_buffer: list[dict] = []  # 捕获引用信息
 
         try:
             async with self.client.messages.stream(
@@ -443,6 +445,7 @@ class Agent:
 
                             # 处理文本增量
                             if delta_type == "text_delta":
+                                has_text_delta = True  # 标记已处理增量
                                 text = getattr(event.delta, "text", "")
                                 # 清理角色名前缀
                                 if text.startswith(f"[{self.name}]:"):
@@ -453,8 +456,30 @@ class Agent:
                                 response_text += text
                                 print(text, end="", flush=True)
 
-                    # 处理 text 事件（旧格式，用于测试兼容）
-                    elif event.type == "text":
+                            # 处理引用增量
+                            elif delta_type == "citations_delta":
+                                # 捕获引用信息
+                                if hasattr(event.delta, "citations"):
+                                    for citation in event.delta.citations:
+                                        citations_buffer.append(
+                                            {
+                                                "type": getattr(
+                                                    citation, "type", "unknown"
+                                                ),
+                                                "document_title": getattr(
+                                                    citation,
+                                                    "document_title",
+                                                    "未知来源",
+                                                ),
+                                                "cited_text": getattr(
+                                                    citation, "cited_text", ""
+                                                ),
+                                            }
+                                        )
+
+                    # 处理 text 事件（旧格式）
+                    # 只在没有处理过 text_delta 时才处理，避免重复
+                    elif event.type == "text" and not has_text_delta:
                         text = getattr(event, "text", "")
                         # 清理角色名前缀
                         if text.startswith(f"[{self.name}]:"):
@@ -471,6 +496,10 @@ class Agent:
         except Exception as e:
             logger.exception(f"继续响应出错: {e}")
             return response_text
+
+        # 显示引用列表（如果有）
+        if citations_buffer:
+            self._display_citations(citations_buffer)
 
         return response_text
 

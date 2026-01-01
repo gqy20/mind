@@ -85,6 +85,11 @@ def parse_args() -> argparse.Namespace:
         help="禁用工具扩展能力（默认启用）",
     )
     parser.add_argument(
+        "--no-search",
+        action="store_true",
+        help="禁用网络搜索功能（默认启用）",
+    )
+    parser.add_argument(
         "--tool-interval",
         type=int,
         default=5,
@@ -173,6 +178,7 @@ async def main():
         turn_interval=1.0,
         enable_tools=not args.no_tools,
         tool_interval=args.tool_interval,
+        enable_search=not args.no_search,
     )
 
     # 获取主题

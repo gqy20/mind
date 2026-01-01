@@ -14,7 +14,7 @@ class TestPromptEnhancement:
     """测试提示词增强功能"""
 
     def test_prompt_unchanged_without_tool_agent(self):
-        """测试：无工具时 system_prompt 保持不变"""
+        """测试：无 tool_agent 时仍然会添加搜索工具说明"""
         # Arrange
         original_prompt = "你是一个支持者"
 
@@ -25,8 +25,11 @@ class TestPromptEnhancement:
             tool_agent=None,
         )
 
-        # Assert - system_prompt 应该保持原样
-        assert agent.system_prompt == original_prompt
+        # Assert - system_prompt 应该包含搜索工具说明
+        assert len(agent.system_prompt) > len(original_prompt)
+        assert "搜索" in agent.system_prompt or "search" in agent.system_prompt.lower()
+        # 原始提示词应该被保留
+        assert original_prompt in agent.system_prompt
 
     def test_prompt_includes_tool_instruction_with_tool_agent(self):
         """测试：有工具时 system_prompt 包含工具说明"""
