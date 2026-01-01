@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 logger = get_logger("mind.conversation")
 
 # 对话记忆保存目录
-MEMORY_DIR = Path("conversations")
+MEMORY_DIR = Path("history")
 
 # Rich console 用于进度条显示
 console = Console()

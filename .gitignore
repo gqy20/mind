@@ -42,7 +42,7 @@ tmp/
 # Logs
 *.log
 logs/
-conversations/
+history/
 
 # uv
 uv.lock
