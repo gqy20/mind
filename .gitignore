@@ -31,7 +31,7 @@ env/
 .coverage
 htmlcov/
 .tox/
-
+tmp/
 # IDEs
 .vscode/
 .idea/
