@@ -64,6 +64,8 @@ class ConversationManager:
     summary: str = ""
     # 是否启用工具（默认不启用）
     enable_tools: bool = False
+    # 工具调用间隔（轮数），0 表示禁用自动调用
+    tool_interval: int = 5
 
     def __post_init__(self):
         """初始化后处理：配置工具智能体"""
@@ -394,6 +396,33 @@ class ConversationManager:
         """执行一轮对话"""
         # 确定当前发言的智能体
         current_agent = self.agent_a if self.current == 0 else self.agent_b
+
+        # 工具调用：在特定轮次调用工具并注入结果
+        if (
+            self.enable_tools
+            and self.tool_interval > 0
+            and self.turn > 0
+            and self.turn % self.tool_interval == 0
+        ):
+            logger.info(f"第 {self.turn} 轮：调用工具获取上下文")
+
+            # 调用当前智能体的工具
+            tool_result = await current_agent.query_tool("分析代码库")
+
+            # 如果工具返回有效结果，注入到对话历史
+            if tool_result:
+                tool_message = cast(
+                    MessageParam,
+                    {
+                        "role": "user",
+                        "content": f"[系统消息 - 上下文更新]\n{tool_result}",
+                    },
+                )
+                self.messages.append(tool_message)
+                self.memory.add_message(
+                    tool_message["role"], cast(str, tool_message["content"])
+                )
+                logger.info(f"工具结果已注入对话历史，当前消息数: {len(self.messages)}")
 
         # 打印智能体名称（换行以避免覆盖进度条）
         print(f"\n[{current_agent.name}]: ", end="", flush=True)
