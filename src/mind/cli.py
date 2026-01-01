@@ -79,6 +79,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="测试工具扩展功能（阶段一）",
     )
+    parser.add_argument(
+        "--with-tools",
+        action="store_true",
+        help="启用工具扩展能力（代码分析、文件读取等）",
+    )
     # 使用 parse_known_args 忽略未知参数（如 pytest 的 -v）
     args, _ = parser.parse_known_args()
 
@@ -160,6 +165,7 @@ async def main():
         agent_a=supporter,
         agent_b=challenger,
         turn_interval=1.0,
+        enable_tools=args.with_tools,
     )
 
     # 获取主题
