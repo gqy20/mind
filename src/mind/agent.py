@@ -160,7 +160,14 @@ class Agent:
                 messages=messages,
                 tools=_get_tools_schema(),  # 传入工具定义
             ) as stream:
+                event_count = 0
                 async for event in stream:
+                    event_count += 1
+                    # 每 50 个事件记录一次（避免日志过多）
+                    if event_count % 50 == 0:
+                        logger.debug(
+                            f"已处理 {event_count} 个事件，最新事件类型: {event.type}"
+                        )
                     # 检查中断
                     if interrupt.is_set():
                         logger.debug(f"智能体 {self.name} 响应中途被中断")
@@ -180,15 +187,14 @@ class Agent:
                         print(text, end="", flush=True)
 
                     elif event.type == "content_block_stop":
-                        pass
-
-                    # 检测工具调用
-                    elif event.type == "content_block_start":
+                        # 在 content_block_stop 时，工具调用的 input 已完全构建
                         if hasattr(event, "content_block") and hasattr(
                             event.content_block, "type"
                         ):
                             if event.content_block.type == "tool_use":
-                                # 开始工具调用，初始化 buffer
+                                logger.debug(
+                                    f"检测到工具调用完成: {event.content_block.name}"
+                                )
                                 if tool_use_buffer is None:
                                     tool_use_buffer = []
                                 tool_use_buffer.append(
@@ -204,20 +210,13 @@ class Agent:
                                     }
                                 )
 
-                    elif event.type == "tool_use":  # type: ignore[comparison-overlap]
-                        # 收集工具调用信息
-                        if tool_use_buffer is None:
-                            tool_use_buffer = []
-                        tool_use_buffer.append(
-                            {
-                                "type": "tool_use",
-                                "id": event.id if hasattr(event, "id") else "",
-                                "name": event.name if hasattr(event, "name") else "",
-                                "input": event.input if hasattr(event, "input") else {},
-                            }
-                        )
-
             # 处理工具调用
+            buffer_status = (
+                f"{len(tool_use_buffer)} 个工具调用"
+                if tool_use_buffer
+                else "0 个工具调用"
+            )
+            logger.debug(f"工具调用检测完成，buffer 状态: {buffer_status}")
             if tool_use_buffer:
                 for tool_call in tool_use_buffer:
                     if tool_call["name"] == "search_web":

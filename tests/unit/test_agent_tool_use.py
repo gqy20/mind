@@ -43,17 +43,22 @@ class TestAgentToolUse:
         messages = [MessageParam(role="user", content="GPT-5 什么时候发布？")]
 
         # 模拟流式事件
+        # 创建 mock 的 content_block（ToolUseBlock）
+        mock_tool_block = MagicMock()
+        mock_tool_block.type = "tool_use"
+        mock_tool_block.id = "toolu_123"
+        mock_tool_block.name = "search_web"
+        mock_tool_block.input = {"query": "GPT-5 发布时间"}
+
         events = [
-            MagicMock(type="content_block_start", index=0),
-            # 工具调用开始
+            # 工具调用开始（content_block_start 时 input 为空）
             MagicMock(
-                type="tool_use",
-                name="search_web",
-                id="toolu_123",
-                input={"query": "GPT-5 发布时间"},
+                type="content_block_start", index=0, content_block=mock_tool_block
             ),
-            # 工具调用结束
-            MagicMock(type="content_block_stop", index=0),
+            # 工具调用结束（content_block_stop 时 input 已完整）
+            MagicMock(
+                type="content_block_stop", index=0, content_block=mock_tool_block
+            ),
             # 文本响应
             MagicMock(type="text", text="根据搜索结果，"),
             MagicMock(type="text", text="GPT-5 尚未正式发布。"),
