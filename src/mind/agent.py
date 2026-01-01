@@ -52,9 +52,11 @@ class Agent:
         if not name or not name.strip():
             raise ValueError("名称不能为空")
         self.name = name
-        self.system_prompt = system_prompt
         self.model = model or DEFAULT_MODEL
         self.tool_agent = tool_agent
+
+        # 如果有工具，自动在 system_prompt 中添加工具使用说明
+        self.system_prompt = self._enhance_prompt_with_tool_instruction(system_prompt)
         # 显式读取 API key 并传递给客户端
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
@@ -66,6 +68,41 @@ class Agent:
         else:
             self.client = AsyncAnthropic(api_key=api_key)
         logger.info(f"智能体初始化: {self.name}, 模型: {self.model}")
+
+    def _enhance_prompt_with_tool_instruction(self, prompt: str) -> str:
+        """增强提示词，添加工具使用说明
+
+        Args:
+            prompt: 原始提示词
+
+        Returns:
+            增强后的提示词（如果需要）
+        """
+        # 如果没有工具，直接返回原提示词
+        if self.tool_agent is None:
+            return prompt
+
+        # 检查是否已包含工具说明（避免重复添加）
+        # 检查常见的关键词
+        tool_keywords = ["工具使用", "## 工具", "工具功能", "可用工具"]
+        for keyword in tool_keywords:
+            if keyword in prompt:
+                # 已有工具说明，直接返回
+                return prompt
+
+        # 添加工具使用说明
+        tool_instruction = """
+
+## 工具使用
+
+你配备了代码库分析工具，可以：
+- 分析代码库结构和内容
+- 读取特定文件的内容
+- 搜索代码中的关键词
+
+系统会在适当的时机自动调用工具，并将结果提供给你。你可以基于这些工具返回的信息进行更深入的分析和讨论。
+"""
+        return prompt + tool_instruction
 
     async def respond(
         self, messages: list[MessageParam], interrupt: asyncio.Event
