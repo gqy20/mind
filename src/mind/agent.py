@@ -5,12 +5,16 @@
 import asyncio
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from anthropic import APIStatusError, AsyncAnthropic
 from anthropic.types import MessageParam
 from rich.console import Console
 
 from mind.logger import get_logger
+
+if TYPE_CHECKING:
+    from mind.tools import ToolAgent
 
 console = Console()
 logger = get_logger("mind.agent")
@@ -27,13 +31,20 @@ class Agent:
     system_prompt: str
     client: AsyncAnthropic
 
-    def __init__(self, name: str, system_prompt: str, model: str | None = None):
+    def __init__(
+        self,
+        name: str,
+        system_prompt: str,
+        model: str | None = None,
+        tool_agent: "ToolAgent | None" = None,
+    ):
         """初始化智能体
 
         Args:
             name: 智能体名称
             system_prompt: 系统提示词
             model: 使用的模型，默认从环境变量 ANTHROPIC_MODEL 读取
+            tool_agent: 可选的工具智能体，用于代码分析等功能
 
         Raises:
             ValueError: 当名称为空时抛出异常
@@ -43,6 +54,7 @@ class Agent:
         self.name = name
         self.system_prompt = system_prompt
         self.model = model or DEFAULT_MODEL
+        self.tool_agent = tool_agent
         # 显式读取 API key 并传递给客户端
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
@@ -130,3 +142,37 @@ class Agent:
 
         logger.debug(f"智能体 {self.name} 响应完成，长度: {len(response_text)}")
         return response_text
+
+    async def query_tool(self, question: str) -> str | None:
+        """使用工具查询信息
+
+        Args:
+            question: 查询问题（当前仅支持代码库分析）
+
+        Returns:
+            工具返回的结果摘要，如果没有配置工具或查询失败则返回 None
+        """
+        # 如果没有配置 tool_agent，返回 None
+        if self.tool_agent is None:
+            logger.debug(f"智能体 {self.name} 没有配置工具，跳过工具查询")
+            return None
+
+        try:
+            # 调用 ToolAgent 的代码库分析方法
+            result = await self.tool_agent.analyze_codebase(".")
+
+            # 检查结果是否成功
+            if result.get("success"):
+                summary = result.get("summary", "")
+                logger.info(f"智能体 {self.name} 工具查询成功")
+                return summary if isinstance(summary, str) else None
+            else:
+                # 工具调用失败
+                error = result.get("error", "未知错误")
+                logger.warning(f"智能体 {self.name} 工具查询失败: {error}")
+                return None
+
+        except Exception as e:
+            # 捕获所有异常，返回 None
+            logger.error(f"智能体 {self.name} 工具查询异常: {e}", exc_info=True)
+            return None
