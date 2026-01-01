@@ -38,7 +38,13 @@ console = Console()
 
 
 def _is_input_ready():
-    """检查是否有输入可读（非阻塞）"""
+    """检查是否有输入可读（非阻塞）
+
+    只在交互终端（TTY）中工作，非 TTY 环境返回 False
+    """
+    # 检查是否在交互终端中运行
+    if not sys.stdin.isatty():
+        return False
     return select.select([sys.stdin], [], [], 0)[0]
 
 
