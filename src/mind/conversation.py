@@ -392,6 +392,26 @@ class ConversationManager:
             logger.debug("用户取消输入")
             print("❌ 取消输入，继续对话...\n")
 
+    async def _wait_for_user_input(self):
+        """后台等待用户输入，设置中断标志
+
+        这个方法在后台运行，定期检查 stdin 是否有输入可读。
+        如果检测到输入，立即设置 interrupt 标志以中断正在进行的响应。
+        """
+        try:
+            while True:
+                if _is_input_ready():
+                    # 检测到输入，设置中断标志
+                    self.interrupt.set()
+                    logger.debug("后台监听检测到用户输入，已设置中断标志")
+                    break
+                # 每 50ms 检查一次
+                await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            # 任务被取消是正常的（当响应完成时）
+            logger.debug("输入监听任务被取消")
+            raise
+
     async def _turn(self):
         """执行一轮对话"""
         # 确定当前发言的智能体
@@ -436,8 +456,19 @@ class ConversationManager:
         # 打印智能体名称（换行以避免覆盖进度条）
         print(f"\n[{current_agent.name}]: ", end="", flush=True)
 
-        # 智能体响应
-        response = await current_agent.respond(self.messages, self.interrupt)
+        # 创建输入监听任务，在后台并发运行
+        input_monitor_task = asyncio.create_task(self._wait_for_user_input())
+
+        # 智能体响应（与输入监听并发执行）
+        try:
+            response = await current_agent.respond(self.messages, self.interrupt)
+        finally:
+            # 响应完成（无论成功还是中断），取消输入监听任务
+            input_monitor_task.cancel()
+            try:
+                await input_monitor_task
+            except asyncio.CancelledError:
+                pass  # 任务取消异常是预期的
 
         print()  # 换行
 

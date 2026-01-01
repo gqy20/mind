@@ -34,26 +34,32 @@ class TestConcurrentInputMonitoring:
                 return None
             return "A的回复"
 
+        # 使用一个可控制的函数来模拟 _is_input_ready
+        input_ready = False
+
+        def mock_is_input_ready():
+            return input_ready
+
         # 模拟在响应过程中有用户输入
         async def simulate_input_during_respond():
             """模拟用户在智能体输出过程中按 Enter"""
+            nonlocal input_ready
             await asyncio.sleep(0.05)  # 等待一小段时间
-            # 这里模拟 _is_input_ready() 返回 True
-            # 但由于当前实现是串行的，这个输入不会被检测到
-            return True
+            input_ready = True  # 设置输入就绪标志
+            await asyncio.sleep(0.15)  # 等待后台任务检测到输入
 
         with patch.object(agent_a, "respond", side_effect=slow_respond):
-            # Act
-            input_task = asyncio.create_task(simulate_input_during_respond())
-            await manager._turn()
-            has_input = await input_task
+            with patch(
+                "mind.conversation._is_input_ready", side_effect=mock_is_input_ready
+            ):
+                # Act
+                input_task = asyncio.create_task(simulate_input_during_respond())
+                await manager._turn()
+                await input_task
 
-            # Assert
-            # 当前实现：输入在响应期间不会被检测到
-            # 预期实现：输入应该被检测到并设置 interrupt
-            # 这个测试会失败，因为当前实现是串行的
-            assert has_input, "应该检测到用户输入"
-            assert manager.interrupt.is_set(), "中断标志应该被设置"
+                # Assert
+                # 预期实现：输入应该被检测到并设置 interrupt
+                assert manager.interrupt.is_set(), "中断标志应该被设置"
 
     @pytest.mark.asyncio
     async def test_turn_should_monitor_input_concurrently(self):
@@ -106,6 +112,10 @@ class TestConcurrentInputIntegration:
         # 创建一个慢响应模拟
         response_started = False
         response_completed = False
+        input_ready = False
+
+        def mock_is_input_ready():
+            return input_ready
 
         async def slow_respond(messages, interrupt):
             nonlocal response_started, response_completed
@@ -118,20 +128,22 @@ class TestConcurrentInputIntegration:
 
         # 模拟输入到达
         async def trigger_input():
+            nonlocal input_ready
             await asyncio.sleep(0.1)  # 在响应开始后触发
-            with patch("mind.conversation._is_input_ready", return_value=True):
-                if hasattr(manager, "_wait_for_user_input"):
-                    await manager._wait_for_user_input()
+            input_ready = True
+            await asyncio.sleep(0.2)  # 等待后台任务检测
 
         with patch.object(agent_a, "respond", side_effect=slow_respond):
-            # Act
-            input_task = asyncio.create_task(trigger_input())
-            await manager._turn()
-            await input_task
+            with patch(
+                "mind.conversation._is_input_ready", side_effect=mock_is_input_ready
+            ):
+                # Act
+                input_task = asyncio.create_task(trigger_input())
+                await manager._turn()
+                await input_task
 
-            # Assert
-            assert response_started, "响应应该已经开始"
-            # 当前实现会失败：响应会完成而不被中断
-            # 预期行为：响应应该被中断
-            assert not response_completed, "响应应该被中断"
-            assert manager.interrupt.is_set(), "中断标志应该被设置"
+                # Assert
+                assert response_started, "响应应该已经开始"
+                # 预期行为：响应应该被中断
+                assert not response_completed, "响应应该被中断"
+                assert manager.interrupt.is_set(), "中断标志应该被设置"
