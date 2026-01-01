@@ -194,21 +194,8 @@ class Agent:
                         logger.debug(f"智能体 {self.name} 响应中途被中断")
                         return None
 
-                    if event.type == "text":
-                        # 实时清理角色名前缀（如果 AI 误添加了）
-                        text = event.text
-                        # 移除常见的角色名前缀格式
-                        if text.startswith(f"[{self.name}]:"):
-                            text = text[len(f"[{self.name}]:") :].lstrip()
-                        elif text.startswith(f"{self.name}:"):
-                            text = text[len(f"{self.name}:") :].lstrip()
-
-                        response_text += text
-                        # 实时打印
-                        print(text, end="", flush=True)
-
-                    elif event.type == "content_block_delta":
-                        # 处理内容块增量事件（可能包含引用增量）
+                    # 处理 content_block_delta 事件（新格式）
+                    if event.type == "content_block_delta":
                         if hasattr(event, "delta") and hasattr(event.delta, "type"):
                             delta_type = event.delta.type
 
@@ -244,6 +231,18 @@ class Agent:
                                                 ),
                                             }
                                         )
+
+                    # 处理 text 事件（旧格式，用于测试兼容）
+                    elif event.type == "text":
+                        text = getattr(event, "text", "")
+                        # 清理角色名前缀
+                        if text.startswith(f"[{self.name}]:"):
+                            text = text[len(f"[{self.name}]:") :].lstrip()
+                        elif text.startswith(f"{self.name}:"):
+                            text = text[len(f"{self.name}:") :].lstrip()
+
+                        response_text += text
+                        print(text, end="", flush=True)
 
                     elif event.type == "content_block_stop":
                         # 在 content_block_stop 时，工具调用的 input 已完全构建
@@ -437,9 +436,27 @@ class Agent:
                         logger.debug(f"智能体 {self.name} 继续响应被中断")
                         return response_text
 
-                    if event.type == "text":
-                        # 实时清理角色名前缀（如果 AI 误添加了）
-                        text = event.text
+                    # 处理 content_block_delta 事件（新格式）
+                    if event.type == "content_block_delta":
+                        if hasattr(event, "delta") and hasattr(event.delta, "type"):
+                            delta_type = event.delta.type
+
+                            # 处理文本增量
+                            if delta_type == "text_delta":
+                                text = getattr(event.delta, "text", "")
+                                # 清理角色名前缀
+                                if text.startswith(f"[{self.name}]:"):
+                                    text = text[len(f"[{self.name}]:") :].lstrip()
+                                elif text.startswith(f"{self.name}:"):
+                                    text = text[len(f"{self.name}:") :].lstrip()
+
+                                response_text += text
+                                print(text, end="", flush=True)
+
+                    # 处理 text 事件（旧格式，用于测试兼容）
+                    elif event.type == "text":
+                        text = getattr(event, "text", "")
+                        # 清理角色名前缀
                         if text.startswith(f"[{self.name}]:"):
                             text = text[len(f"[{self.name}]:") :].lstrip()
                         elif text.startswith(f"{self.name}:"):
@@ -447,6 +464,7 @@ class Agent:
 
                         response_text += text
                         print(text, end="", flush=True)
+
                     elif event.type == "content_block_stop":
                         pass
 
