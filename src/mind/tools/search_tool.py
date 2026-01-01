@@ -28,6 +28,32 @@ def _search_sync(query: str, max_results: int) -> list[dict]:
     return DDGS().text(query, max_results=max_results)
 
 
+def _format_result_as_block(result: dict) -> dict:
+    """将单个搜索结果格式化为 Citations content block
+
+    Args:
+        result: 单个搜索结果字典
+
+    Returns:
+        Citations content block 格式的字典
+    """
+    title = result.get("title", "无标题")
+    href = result.get("href", "")
+    body = result.get("body", "")
+
+    # 构建块文本
+    block_parts = [title]
+    if href:
+        block_parts.append(f"来源: {href}")
+    if body:
+        # 限制摘要长度
+        short_body = body[:200] + "..." if len(body) > 200 else body
+        block_parts.append(f"内容: {short_body}")
+
+    block_text = "\n".join(block_parts)
+    return {"type": "text", "text": block_text}
+
+
 async def search_web(query: str, max_results: int = 5) -> str | None:
     """搜索网络并返回格式化的结果
 
@@ -118,23 +144,7 @@ async def search_web_as_document(query: str, max_results: int = 5) -> dict | Non
             return None
 
         # 转换为 content blocks（每个搜索结果作为一个可引用的块）
-        content_blocks = []
-        for r in results[:max_results]:
-            title = r.get("title", "无标题")
-            href = r.get("href", "")
-            body = r.get("body", "")
-
-            # 构建块文本
-            block_parts = [title]
-            if href:
-                block_parts.append(f"来源: {href}")
-            if body:
-                # 限制摘要长度
-                short_body = body[:200] + "..." if len(body) > 200 else body
-                block_parts.append(f"内容: {short_body}")
-
-            block_text = "\n".join(block_parts)
-            content_blocks.append({"type": "text", "text": block_text})
+        content_blocks = [_format_result_as_block(r) for r in results[:max_results]]
 
         # 构建文档结构
         document = {
