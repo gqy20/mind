@@ -50,21 +50,22 @@ async def search_web(query: str, max_results: int = 5) -> str | None:
             logger.warning(f"搜索未返回结果: {query}")
             return None
 
-        # 格式化结果
+        # 格式化结果 - 使用引用标记格式
         summary_parts = [f"**网络搜索结果**: {query}\n"]
+        summary_parts.append("请在回复时使用引用标记，例如：`根据研究[1]，...`\n")
 
         for i, r in enumerate(results[:max_results], 1):
             title = r.get("title", "无标题")
             href = r.get("href", "")
             body = r.get("body", "")
 
-            summary_parts.append(f"{i}. {title}")
+            summary_parts.append(f"[{i}] {title}")
             if href:
-                summary_parts.append(f"   链接: {href}")
+                summary_parts.append(f"    来源: {href}")
             if body:
                 # 限制摘要长度
-                short_body = body[:100] + "..." if len(body) > 100 else body
-                summary_parts.append(f"   摘要: {short_body}")
+                short_body = body[:150] + "..." if len(body) > 150 else body
+                summary_parts.append(f"    内容: {short_body}")
             summary_parts.append("")
 
         result = "\n".join(summary_parts)
