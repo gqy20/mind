@@ -1,6 +1,6 @@
 """测试智能搜索触发功能
 
-这个测试套件验证 AI 主动请求搜索和关键词检测的智能触发机制。
+这个测试套件验证 AI 主动请求搜索和简化后的触发机制。
 """
 
 import pytest
@@ -65,69 +65,6 @@ class TestAISearchRequest:
         assert has_request is False
 
 
-class TestKeywordDetection:
-    """测试关键词智能检测功能"""
-
-    @pytest.mark.asyncio
-    async def test_detect_uncertainty_keywords(self):
-        """测试：检测不确定性关键词触发搜索"""
-        # Arrange
-        manager = ConversationManager(
-            agent_a=Agent(name="A", system_prompt="你是A"),
-            agent_b=Agent(name="B", system_prompt="你是B"),
-        )
-
-        manager.messages = [
-            {"role": "user", "content": "GPT-5 发布了吗？"},
-            {"role": "assistant", "content": "我不确定最新的发布时间"},
-        ]
-
-        # Act
-        should_search = manager._should_search_by_keywords()
-
-        # Assert
-        assert should_search is True
-
-    @pytest.mark.asyncio
-    async def test_detect_factual_question_keywords(self):
-        """测试：检测事实性问题关键词"""
-        # Arrange
-        manager = ConversationManager(
-            agent_a=Agent(name="A", system_prompt="你是A"),
-            agent_b=Agent(name="B", system_prompt="你是B"),
-        )
-
-        manager.messages = [
-            {"role": "user", "content": "当前的具体数据是多少？"},
-        ]
-
-        # Act
-        should_search = manager._should_search_by_keywords()
-
-        # Assert
-        assert should_search is True
-
-    @pytest.mark.asyncio
-    async def test_no_trigger_in_opinion_discussion(self):
-        """测试：观点讨论不触发搜索"""
-        # Arrange
-        manager = ConversationManager(
-            agent_a=Agent(name="A", system_prompt="你是A"),
-            agent_b=Agent(name="B", system_prompt="你是B"),
-        )
-
-        manager.messages = [
-            {"role": "user", "content": "你觉得 AI 有意识吗？"},
-            {"role": "assistant", "content": "我认为这是一个哲学问题"},
-        ]
-
-        # Act
-        should_search = manager._should_search_by_keywords()
-
-        # Assert
-        assert should_search is False
-
-
 class TestIntelligentSearchTrigger:
     """测试综合智能触发逻辑"""
 
@@ -153,23 +90,25 @@ class TestIntelligentSearchTrigger:
         assert need_search is True
 
     @pytest.mark.asyncio
-    async def test_keyword_trigger_when_no_ai_request(self):
-        """测试：无 AI 请求时，关键词检测作为补充"""
+    async def test_only_ai_request_and_interval_trigger(self):
+        """测试：只有 AI 请求和固定间隔能触发"""
         # Arrange
         manager = ConversationManager(
             agent_a=Agent(name="A", system_prompt="你是A"),
             agent_b=Agent(name="B", system_prompt="你是B"),
+            enable_search=True,
+            search_interval=5,
         )
-
         manager.messages = [
-            {"role": "user", "content": "最新的发布时间是什么？"},
+            {"role": "user", "content": "普通讨论"},
         ]
+        manager.turn = 1  # 未达到间隔
 
-        # Act
+        # Act - 无 AI 请求，未达到间隔
         need_search = manager._should_trigger_search()
 
-        # Assert
-        assert need_search is True
+        # Assert - 不应该触发（移除了关键词检测）
+        assert need_search is False
 
     @pytest.mark.asyncio
     async def test_fallback_to_interval_when_no_signals(self):
