@@ -25,7 +25,8 @@ class TestAgentInit:
 
         # Assert
         assert agent.name == "测试智能体"
-        assert agent.system_prompt == "你是一个测试助手"
+        # system_prompt 会自动添加工具使用说明
+        assert "你是一个测试助手" in agent.system_prompt
         assert agent.client is not None
 
     def test_init_empty_name_raises_error(self):

@@ -110,10 +110,6 @@ class Agent:
         Returns:
             增强后的提示词（如果需要）
         """
-        # 如果没有工具，直接返回原提示词
-        if self.tool_agent is None:
-            return prompt
-
         # 检查是否已包含工具说明（避免重复添加）
         # 检查常见的关键词
         tool_keywords = ["工具使用", "## 工具", "工具功能", "可用工具"]
@@ -122,10 +118,25 @@ class Agent:
                 # 已有工具说明，直接返回
                 return prompt
 
-        # 添加工具使用说明
-        tool_instruction = """
+        # 构建工具使用说明
+        tool_parts = ["\n\n## 工具使用\n"]
 
-## 工具使用
+        # 搜索工具（所有智能体都有）
+        tool_parts.append("""### 网络搜索工具
+
+你可以使用 search_web 工具搜索网络信息，获取最新数据、事实、定义等。
+
+**双语搜索策略**（重要）：
+- 当讨论学术概念、技术术语时，请同时搜索中文和英文关键词
+- 例如：讨论"表观遗传学"时，可以搜索 "表观遗传学 epigenetics" 或分别搜索
+- 例如：讨论"机器学习"时，可以搜索 "机器学习 machine learning"
+- 这样可以获得更全面、更权威的信息
+
+""")
+
+        # 代码库分析工具（仅当有 tool_agent 时）
+        if self.tool_agent is not None:
+            tool_parts.append("""### 代码库分析工具
 
 你配备了代码库分析工具，可以：
 - 分析代码库结构和内容
@@ -133,8 +144,10 @@ class Agent:
 - 搜索代码中的关键词
 
 系统会在适当的时机自动调用工具，并将结果提供给你。你可以基于这些工具返回的信息进行更深入的分析和讨论。
-"""
-        return prompt + tool_instruction
+""")
+
+        tool_parts.append("系统会在适当的时机自动调用工具。")
+        return prompt + "".join(tool_parts)
 
     async def respond(
         self, messages: list[MessageParam], interrupt: asyncio.Event
