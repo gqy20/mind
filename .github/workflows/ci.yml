@@ -32,7 +32,7 @@ jobs:
       - name: Create virtual environment and install dependencies
         run: |
           uv venv .venv
-          uv sync --extra dev
+          uv sync --group dev
 
       - name: Run ruff check
         run: uv run ruff check .
