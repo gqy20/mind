@@ -80,9 +80,9 @@ def parse_args() -> argparse.Namespace:
         help="测试工具扩展功能（阶段一）",
     )
     parser.add_argument(
-        "--with-tools",
+        "--no-tools",
         action="store_true",
-        help="启用工具扩展能力（代码分析、文件读取等）",
+        help="禁用工具扩展能力（默认启用）",
     )
     parser.add_argument(
         "--tool-interval",
@@ -171,7 +171,7 @@ async def main():
         agent_a=supporter,
         agent_b=challenger,
         turn_interval=1.0,
-        enable_tools=args.with_tools,
+        enable_tools=not args.no_tools,
         tool_interval=args.tool_interval,
     )
 
