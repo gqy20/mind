@@ -376,6 +376,25 @@ class Agent:
 
         self.search_documents.append(doc)
 
+    def _merge_documents_with_content(self, content: object) -> list[object]:
+        """将文档池与消息内容合并
+
+        Args:
+            content: 原始消息内容（字符串或结构化列表）
+
+        Returns:
+            合并后的内容列表
+        """
+        if isinstance(content, str):
+            return [
+                *self.search_documents,
+                {"type": "text", "text": content},
+            ]
+        elif isinstance(content, list):
+            return list(self.search_documents) + list(content)
+        else:
+            return list(self.search_documents)
+
     def _format_messages_with_documents(
         self, messages: list[MessageParam]
     ) -> list[MessageParam]:
@@ -391,28 +410,16 @@ class Agent:
         if not self.search_documents:
             return messages
 
-        # 只处理第一条用户消息（假设这是当前问题）
+        # 处理用户消息，合并文档
         formatted_messages: list[MessageParam] = []
         for msg in messages:
             if msg["role"] == "user":
-                # 获取消息内容
-                content = msg.get("content", "")
-
-                # 构建新的内容：文档 + 原内容
-                if isinstance(content, str):
-                    # 字符串转为结构化格式
-                    new_content = [
-                        *self.search_documents,
-                        {"type": "text", "text": content},
-                    ]
-                elif isinstance(content, list):
-                    # 已经是结构化格式，在前面插入文档
-                    new_content = list(self.search_documents) + list(content)
-                else:
-                    new_content = list(self.search_documents)
-
+                new_content = self._merge_documents_with_content(msg.get("content", ""))
                 formatted_messages.append(
-                    MessageParam(role="user", content=new_content)
+                    MessageParam(
+                        role="user",
+                        content=new_content,  # type: ignore[typeddict-item]
+                    )
                 )
             else:
                 formatted_messages.append(msg)
