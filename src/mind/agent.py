@@ -4,7 +4,7 @@
 
 import asyncio
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from anthropic import APIStatusError, AsyncAnthropic
@@ -12,6 +12,7 @@ from anthropic.types import MessageParam, ToolParam
 from rich.console import Console
 
 from mind.logger import get_logger
+from mind.prompts import SearchConfig, SettingsConfig
 
 if TYPE_CHECKING:
     from mind.tools import ToolAgent
@@ -55,9 +56,11 @@ class Agent:
     name: str
     system_prompt: str
     client: AsyncAnthropic
-    search_documents: list
-    max_documents: int
-    document_ttl: int
+    search_documents: list = field(default_factory=list)
+    max_documents: int = 10
+    document_ttl: int = 5
+    # 搜索配置
+    search_config: SearchConfig = field(default_factory=SearchConfig)
 
     def __init__(
         self,
@@ -65,6 +68,7 @@ class Agent:
         system_prompt: str,
         model: str | None = None,
         tool_agent: "ToolAgent | None" = None,
+        settings: SettingsConfig | None = None,
     ):
         """初始化智能体
 
@@ -73,6 +77,7 @@ class Agent:
             system_prompt: 系统提示词
             model: 使用的模型，默认从环境变量 ANTHROPIC_MODEL 读取
             tool_agent: 可选的工具智能体，用于代码分析等功能
+            settings: 系统设置配置
 
         Raises:
             ValueError: 当名称为空时抛出异常
@@ -83,9 +88,17 @@ class Agent:
         self.model = model or DEFAULT_MODEL
         self.tool_agent = tool_agent
         self.search_documents = []
-        self.max_documents = 10
-        self.document_ttl = 5
         self.search_history = None  # 由 ConversationManager 设置
+
+        # 从配置中读取设置
+        if settings:
+            self.max_documents = settings.documents.max_documents
+            self.document_ttl = settings.documents.ttl
+            self.search_config = settings.search
+        else:
+            self.max_documents = 10
+            self.document_ttl = 5
+            self.search_config = SearchConfig()
 
         # 如果有工具，自动在 system_prompt 中添加工具使用说明
         self.system_prompt = self._enhance_prompt_with_tool_instruction(system_prompt)
@@ -291,7 +304,9 @@ class Agent:
                             from mind.tools.search_tool import _search_sync
 
                             # 执行搜索获取原始结果
-                            raw_results = await _search_sync(query, max_results=3)
+                            raw_results = await _search_sync(
+                                query, max_results=self.search_config.max_results
+                            )
 
                             if raw_results:
                                 print(" ✅")
@@ -304,7 +319,7 @@ class Agent:
 
                                     # 获取最新的搜索记录（包括当前这次）
                                     latest_searches = self.search_history.get_latest(
-                                        limit=3
+                                        limit=self.search_config.history_limit
                                     )
 
                                     # 转换为 Citations 文档
@@ -329,7 +344,8 @@ class Agent:
                                     from mind.tools.search_tool import search_web
 
                                     search_result = await search_web(
-                                        query, max_results=3
+                                        query,
+                                        max_results=self.search_config.max_results,
                                     )
 
                                     # 将搜索结果添加到消息历史

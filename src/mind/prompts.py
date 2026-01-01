@@ -1,6 +1,6 @@
 """提示词配置加载模块
 
-从 YAML 文件加载智能体提示词配置。
+从 YAML 文件加载智能体提示词配置和系统设置。
 """
 
 from pathlib import Path
@@ -14,6 +14,44 @@ class AgentConfig(BaseModel):
 
     name: str = Field(..., description="智能体名称")
     system_prompt: str = Field(..., description="系统提示词")
+
+
+class SearchConfig(BaseModel):
+    """搜索配置模型"""
+
+    max_results: int = Field(default=10, description="每次搜索最大结果数")
+    history_limit: int = Field(default=5, description="提供给 AI 的搜索记录数")
+
+
+class DocumentsConfig(BaseModel):
+    """文档池配置模型"""
+
+    max_documents: int = Field(default=10, description="文档池最大数量")
+    ttl: int = Field(default=5, description="文档过期时间（轮数）")
+
+
+class ConversationConfig(BaseModel):
+    """对话配置模型"""
+
+    turn_interval: float = Field(default=1.0, description="对话轮次间隔（秒）")
+    max_turns: int = Field(default=500, description="非交互模式最大轮数")
+
+
+class ToolsConfig(BaseModel):
+    """工具配置模型"""
+
+    tool_interval: int = Field(default=5, description="工具调用间隔（轮数）")
+    enable_tools: bool = Field(default=True, description="是否启用工具")
+    enable_search: bool = Field(default=True, description="是否启用搜索")
+
+
+class SettingsConfig(BaseModel):
+    """系统设置配置模型"""
+
+    search: SearchConfig = Field(default_factory=SearchConfig)
+    documents: DocumentsConfig = Field(default_factory=DocumentsConfig)
+    conversation: ConversationConfig = Field(default_factory=ConversationConfig)
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
 class ConfigError(ValueError):
@@ -62,3 +100,48 @@ def load_agent_configs(config_path: str) -> dict[str, AgentConfig]:
         configs[agent_id] = AgentConfig(**agent_data)
 
     return configs
+
+
+def load_settings(config_path: str | Path) -> SettingsConfig:
+    """从 YAML 文件加载系统设置配置
+
+    Args:
+        config_path: 配置文件路径
+
+    Returns:
+        SettingsConfig 实例
+
+    Raises:
+        FileNotFoundError: 配置文件不存在
+        yaml.YAMLError: YAML 格式错误
+        ValidationError: 配置字段验证失败
+    """
+    config_file = Path(config_path) if isinstance(config_path, str) else config_path
+
+    if not config_file.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_file}")
+
+    with open(config_file, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    # 如果没有 settings 键，返回默认配置
+    if not isinstance(data, dict) or "settings" not in data:
+        return SettingsConfig()
+
+    return SettingsConfig(**data["settings"])
+
+
+def load_all_configs(
+    config_path: str | Path,
+) -> tuple[dict[str, AgentConfig], SettingsConfig]:
+    """从 YAML 文件加载所有配置
+
+    Args:
+        config_path: 配置文件路径
+
+    Returns:
+        (智能体配置字典, 系统设置配置)
+    """
+    configs = load_agent_configs(str(config_path))
+    settings = load_settings(config_path)
+    return configs, settings

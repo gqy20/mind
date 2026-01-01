@@ -80,3 +80,26 @@ agents:
       - "多个来源[1][3]表明相反的结论..."
 
       搜索结果会自动注入对话，你可以基于结果提出更有力的质疑。
+
+# 系统设置配置
+settings:
+  # 搜索配置
+  search:
+    max_results: 10      # 每次搜索最大结果数
+    history_limit: 5     # 提供给 AI 的搜索记录数
+
+  # 文档池配置
+  documents:
+    max_documents: 10    # 文档池最大数量
+    ttl: 5              # 文档过期时间（轮数）
+
+  # 对话配置
+  conversation:
+    turn_interval: 1.0  # 对话轮次间隔（秒）
+    max_turns: 500      # 非交互模式最大轮数
+
+  # 工具配置
+  tools:
+    tool_interval: 5     # 工具调用间隔（轮数），0 表示禁用自动调用
+    enable_tools: true   # 是否启用工具
+    enable_search: true  # 是否启用搜索

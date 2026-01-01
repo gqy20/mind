@@ -18,7 +18,7 @@ import os
 from mind.agent import DEFAULT_MODEL, Agent
 from mind.conversation import ConversationManager
 from mind.logger import get_logger
-from mind.prompts import get_default_config_path, load_agent_configs
+from mind.prompts import get_default_config_path, load_all_configs
 
 logger = get_logger("mind.cli")
 
@@ -92,8 +92,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tool-interval",
         type=int,
-        default=5,
-        help="工具调用间隔（轮数），默认 5，0 表示禁用自动调用",
+        default=None,
+        help="工具调用间隔（轮数），默认从配置文件读取，0 表示禁用自动调用",
     )
     # 使用 parse_known_args 忽略未知参数（如 pytest 的 -v）
     args, _ = parser.parse_known_args()
@@ -152,21 +152,29 @@ async def main():
     if not check_config():
         return
 
-    # 从配置文件加载提示词
-    config_path = str(get_default_config_path())
-    agent_configs = load_agent_configs(config_path)
+    # 从配置文件加载所有配置
+    config_path = get_default_config_path()
+    agent_configs, settings = load_all_configs(config_path)
+
+    # 命令行参数可以覆盖配置文件
+    enable_tools = settings.tools.enable_tools and not args.no_tools
+    enable_search = settings.tools.enable_search and not args.no_search
+    tool_interval = args.tool_interval or settings.tools.tool_interval
+    turn_interval = settings.conversation.turn_interval
 
     # 配置两个智能体
     supporter_config = agent_configs["supporter"]
     supporter = Agent(
         name=supporter_config.name,
         system_prompt=supporter_config.system_prompt,
+        settings=settings,
     )
 
     challenger_config = agent_configs["challenger"]
     challenger = Agent(
         name=challenger_config.name,
         system_prompt=challenger_config.system_prompt,
+        settings=settings,
     )
 
     logger.info("双智能体创建完成: 支持者 vs 挑战者")
@@ -175,10 +183,10 @@ async def main():
     manager = ConversationManager(
         agent_a=supporter,
         agent_b=challenger,
-        turn_interval=1.0,
-        enable_tools=not args.no_tools,
-        tool_interval=args.tool_interval,
-        enable_search=not args.no_search,
+        turn_interval=turn_interval,
+        enable_tools=enable_tools,
+        tool_interval=tool_interval,
+        enable_search=enable_search,
     )
 
     # 获取主题
@@ -206,7 +214,7 @@ async def main():
 
     # 非交互式模式
     if args.non_interactive or args.max_turns:
-        max_turns = args.max_turns or 500
+        max_turns = args.max_turns or settings.conversation.max_turns
         result = await manager.run_auto(topic, max_turns=max_turns)
         print(result)
         logger.info("程序正常退出")
