@@ -62,6 +62,22 @@ class ConversationManager:
     _trim_count: int = 0
     # 对话总结
     summary: str = ""
+    # 是否启用工具（默认不启用）
+    enable_tools: bool = False
+
+    def __post_init__(self):
+        """初始化后处理：配置工具智能体"""
+        # 如果启用工具，为两个智能体设置共享的 ToolAgent
+        if self.enable_tools:
+            from mind.tools import ToolAgent
+
+            # 创建共享的 ToolAgent 实例
+            tool_agent = ToolAgent()
+
+            # 为两个智能体设置同一个工具实例
+            self.agent_a.tool_agent = tool_agent
+            self.agent_b.tool_agent = tool_agent
+            logger.info("工具扩展已启用，两个智能体共享 ToolAgent")
 
     def save_conversation(self) -> Path:
         """保存对话到 JSON 文件
