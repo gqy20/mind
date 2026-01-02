@@ -16,8 +16,8 @@ import asyncio
 import os
 
 from mind.agents.agent import DEFAULT_MODEL, Agent
-from mind.conversation import ConversationManager
 from mind.logger import get_logger
+from mind.manager import ConversationManager
 from mind.prompts import get_default_config_path, load_all_configs
 
 logger = get_logger("mind.cli")

@@ -3,16 +3,12 @@
 确保拆分后的模块结构可以正常导入和使用。
 """
 
-import pytest
-
 
 def test_conversation_manager_can_be_imported():
     """测试 ConversationManager 可以从新位置导入"""
-    # 这个测试将在实现后通过
-    with pytest.raises(ImportError):
-        from mind.conversation import ConversationManager
+    from mind.conversation import ConversationManager
 
-        assert ConversationManager is not None
+    assert ConversationManager is not None
 
 
 def test_progress_display_can_be_imported():

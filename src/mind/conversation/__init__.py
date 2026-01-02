@@ -3,6 +3,9 @@
 这个模块被拆分为多个子模块，每个模块负责一个特定的功能域。
 """
 
+# ConversationManager 已移至 manager.py，通过 mind.manager 导入
+from mind.manager import ConversationManager  # noqa: F401
+
 __all__ = [
     "ConversationManager",
     "ProgressDisplay",
@@ -22,11 +25,7 @@ def __getattr__(name: str):
     Returns:
         导入的对象
     """
-    if name == "ConversationManager":
-        from mind.conversation import manager
-
-        return manager.ConversationManager
-    elif name == "ProgressDisplay":
+    if name == "ProgressDisplay":
         from mind.conversation import progress
 
         return progress.ProgressDisplay
