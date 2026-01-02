@@ -4,11 +4,15 @@
 """
 
 import asyncio
-from typing import TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Any
 
 from mind.agents.client import AnthropicClient
 from mind.agents.documents import DocumentPool
 from mind.agents.response import ResponseHandler
+
+# 默认模型配置
+DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 
 if TYPE_CHECKING:
     from anthropic.types import MessageParam
@@ -22,6 +26,8 @@ class Agent:
         name: str,
         system_prompt: str,
         model: str | None = None,
+        tool_agent: Any = None,
+        settings: Any = None,
     ):
         """初始化智能体
 
@@ -29,13 +35,15 @@ class Agent:
             name: 智能体名称
             system_prompt: 系统提示词
             model: 使用的模型，默认从环境变量 ANTHROPIC_MODEL 读取
+            tool_agent: 可选的工具智能体（向后兼容）
+            settings: 可选的设置配置（向后兼容）
         """
         if not name or not name.strip():
             raise ValueError("名称不能为空")
 
         self.name = name
         self.system_prompt = system_prompt
-        self.model = model or "claude-sonnet-4-5-20250929"
+        self.model = model or DEFAULT_MODEL
 
         # 初始化各个组件
         self.client = AnthropicClient(model=self.model)
@@ -44,6 +52,12 @@ class Agent:
             client=self.client,
             search_history=None,
         )
+
+        # 向后兼容属性
+        self.tool_agent = tool_agent
+        self.search_history = None
+        self.max_documents = 10
+        self.document_ttl = 5
 
     async def respond(
         self, messages: list["MessageParam"], interrupt: asyncio.Event
