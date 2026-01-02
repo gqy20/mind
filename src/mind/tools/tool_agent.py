@@ -186,6 +186,22 @@ class ToolAgent:
         # 此处不可达 (mypy 控制流分析需要)
         raise AssertionError("unreachable")  # noqa: F901
 
+    async def query_tool(
+        self,
+        question: str,
+        messages: list,  # noqa: ARG002 (未使用但保持接口一致)
+    ) -> str:
+        """查询工具（适配器接口）
+
+        Args:
+            question: 查询问题
+            messages: 对话历史（未使用，保持接口一致）
+
+        Returns:
+            工具执行结果
+        """
+        return await self._execute(question)
+
     def _extract_structure(self, analysis: str) -> str:
         """从分析结果中提取目录结构
 
