@@ -4,15 +4,32 @@
 """
 
 import asyncio
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from anthropic import APIStatusError
 from anthropic.types import ToolParam
 
-from mind.agents.citations import display_citations
+from mind.agents.citations import display_citations, format_citations
 from mind.agents.client import AnthropicClient
 from mind.agents.utils import console, logger
 from mind.prompts import SearchConfig
+
+
+@dataclass
+class ResponseResult:
+    """响应结果
+
+    Attributes:
+        text: 响应文本
+        citations: 引用信息列表（原始数据）
+        citations_lines: 格式化的引用文本行
+    """
+
+    text: str
+    citations: list[dict]
+    citations_lines: list[str]
+
 
 if TYPE_CHECKING:
     from anthropic.types import MessageParam
@@ -27,6 +44,7 @@ class ResponseHandler:
         search_history=None,
         search_config: SearchConfig | None = None,
         name: str = "Agent",
+        documents=None,
     ):
         """初始化响应处理器
 
@@ -35,18 +53,20 @@ class ResponseHandler:
             search_history: 可选的搜索历史记录
             search_config: 搜索配置
             name: 智能体名称（用于日志）
+            documents: 可选的文档池，用于存储搜索结果
         """
         self.client = client
         self.search_history = search_history
         self.search_config = search_config or SearchConfig()
         self.name = name
+        self.documents = documents
 
     async def respond(
         self,
         messages: list["MessageParam"],
         system: str,
         interrupt: asyncio.Event,
-    ) -> str | None:
+    ) -> ResponseResult | None:
         """生成响应
 
         Args:
@@ -55,7 +75,7 @@ class ResponseHandler:
             interrupt: 中断事件
 
         Returns:
-            完整响应文本，如果被中断则返回 None
+            ResponseResult 包含响应文本和引用信息，如果被中断则返回 None
         """
         if interrupt.is_set():
             logger.debug(f"智能体 {self.name} 响应被中断")
@@ -170,25 +190,36 @@ class ResponseHandler:
                         logger.warning(f"未知工具: {tool_call['name']}")
 
         except APIStatusError as e:
-            return self._handle_api_status_error(e)
+            self._handle_api_status_error(e)
+            return None
 
         except TimeoutError:
-            return self._handle_timeout_error()
+            self._handle_timeout_error()
+            return None
 
         except OSError as e:
-            return self._handle_os_error(e)
+            self._handle_os_error(e)
+            return None
 
         except Exception as e:
             logger.exception(f"未知错误: {self.name}, 错误: {e}")
             console.print(f"\n[red]❌ 未知错误：{e}[/red]")
             return None
 
-        # 显示引用列表（如果有）
+        # 格式化引用列表（如果有）
+        citations_lines: list[str] = []
         if citations_buffer:
+            # 仍然在交互模式下显示引用
             display_citations(citations_buffer)
+            # 同时生成格式化的文本行（用于非交互模式）
+            citations_lines = format_citations(citations_buffer)
 
         logger.debug(f"智能体 {self.name} 响应完成，长度: {len(response_text)}")
-        return response_text
+        return ResponseResult(
+            text=response_text,
+            citations=citations_buffer,
+            citations_lines=citations_lines,
+        )
 
     async def _continue_response(
         self, messages: list["MessageParam"], system: str, interrupt: asyncio.Event
@@ -322,14 +353,46 @@ class ResponseHandler:
                     limit=self.search_config.history_limit
                 )
 
-                # 转换为 Citations 文档
+                # 转换为 Citations 文档并添加到文档池
                 from mind.agents.documents import DocumentPool
 
-                DocumentPool.from_search_history(latest_searches)
+                citation_doc = DocumentPool.from_search_history(latest_searches)
+                if self.documents:
+                    self.documents.add(citation_doc)
 
-                # 注意：这里需要与 Agent 集成来添加文档
-                # 暂时返回 None，表示需要继续处理
-                return None
+                # 构建工具结果消息（使用搜索结果的文本摘要）
+                search_result_text = (
+                    f"已搜索 '{query}'，找到 {len(raw_results)} 条结果。"
+                )
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": tool_call["id"],
+                                "name": "search_web",
+                                "input": {"query": query},
+                            }
+                        ],
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_call["id"],
+                                "content": search_result_text,
+                            }
+                        ],
+                    }
+                )
+
+                # 基于工具结果继续生成
+                print(f"\n[{self.name}]: ", end="", flush=True)
+                return await self._continue_response(messages, "", interrupt)
 
             # 回退到原始流程（无 SearchHistory）
             from mind.tools.search_tool import search_web
@@ -374,7 +437,7 @@ class ResponseHandler:
             logger.warning("搜索未返回结果")
             return None
 
-    def _handle_api_status_error(self, e: APIStatusError) -> str | None:
+    def _handle_api_status_error(self, e: APIStatusError) -> None:
         """处理 API 状态错误
 
         Args:
@@ -397,9 +460,7 @@ class ResponseHandler:
         else:
             console.print(f"\n[red]❌ API 错误 ({status_code})：{error_msg}[/red]")
 
-        return None
-
-    def _handle_timeout_error(self) -> str | None:
+    def _handle_timeout_error(self) -> None:
         """处理超时错误
 
         Returns:
@@ -407,9 +468,8 @@ class ResponseHandler:
         """
         logger.error(f"请求超时: {self.name}")
         console.print("\n[red]❌ 请求超时：网络连接超时，请检查网络设置[/red]")
-        return None
 
-    def _handle_os_error(self, e: OSError) -> str | None:
+    def _handle_os_error(self, e: OSError) -> None:
         """处理网络错误
 
         Args:
@@ -420,7 +480,6 @@ class ResponseHandler:
         """
         logger.error(f"网络错误: {self.name}, 错误: {e}")
         console.print(f"\n[red]❌ 网络错误：{e}[/red]")
-        return None
 
 
 def _get_tools_schema() -> list[ToolParam]:

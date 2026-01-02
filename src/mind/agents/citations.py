@@ -6,6 +6,51 @@
 from mind.agents.utils import console
 
 
+def format_citations(citations: list[dict]) -> list[str]:
+    """格式化引用列表为文本行
+
+    Args:
+        citations: 引用信息列表
+
+    Returns:
+        格式化后的文本行列表（纯文本，不含 Rich 标记）
+    """
+    if not citations:
+        return []
+
+    # 去重（相同的文档标题和引用文本只显示一次）
+    unique_citations = []
+    seen = set()
+    for citation in citations:
+        key = (
+            citation.get("document_title", ""),
+            citation.get("cited_text", "")[:100],
+        )
+        if key not in seen:
+            seen.add(key)
+            unique_citations.append(citation)
+
+    lines: list[str] = []
+    lines.append("")  # 空行
+    lines.append("─" * 72)  # 分隔线
+    lines.append("📚 引用来源：")
+
+    for i, citation in enumerate(unique_citations, 1):
+        title = citation.get("document_title", "未知来源")
+        cited_text = citation.get("cited_text", "")
+
+        # 限制引用文本长度
+        if len(cited_text) > 150:
+            cited_text = cited_text[:147] + "..."
+
+        lines.append(f"[{i}] {title}")
+        if cited_text:
+            lines.append(f"    {cited_text}")
+
+    lines.append("")  # 空行
+    return lines
+
+
 def display_citations(citations: list[dict]) -> None:
     """显示引用列表
 

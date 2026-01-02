@@ -80,7 +80,13 @@ class PromptBuilder:
         Returns:
             是否已包含工具说明
         """
-        tool_keywords = ["工具使用", "## 工具", "工具功能", "可用工具"]
+        tool_keywords = [
+            "工具使用",
+            "## 工具",
+            "工具功能",
+            "可用工具",
+            "## 网络搜索工具",
+        ]
         return any(keyword in prompt for keyword in tool_keywords)
 
     def _get_tool_instructions(self, tool_agent) -> str:

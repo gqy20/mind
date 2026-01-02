@@ -29,6 +29,7 @@ async def test_agent_uses_new_components():
 async def test_agent_respond_delegates_to_handler():
     """测试 Agent.respond 委托给 ResponseHandler"""
     from mind.agents.agent import Agent
+    from mind.agents.response import ResponseResult
 
     with patch("mind.agents.client.os.getenv", return_value="test-key"):
         agent = Agent(
@@ -36,8 +37,10 @@ async def test_agent_respond_delegates_to_handler():
             system_prompt="你是一个测试助手",
         )
 
-        # Mock ResponseHandler
-        mock_result = "Mocked response"
+        # Mock ResponseHandler 返回 ResponseResult
+        mock_result = ResponseResult(
+            text="Mocked response", citations=[], citations_lines=[]
+        )
         agent.response_handler.respond = AsyncMock(return_value=mock_result)
 
         result = await agent.respond(
@@ -45,7 +48,7 @@ async def test_agent_respond_delegates_to_handler():
             interrupt=asyncio.Event(),
         )
 
-        assert result == mock_result
+        assert result == "Mocked response"
 
 
 @pytest.mark.asyncio

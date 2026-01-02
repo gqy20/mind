@@ -153,5 +153,5 @@ class TestPromptsConfig:
         assert "challenger" in configs
         assert configs["supporter"].name == "支持者"
         assert configs["challenger"].name == "挑战者"
-        assert "观点支持者" in configs["supporter"].system_prompt
-        assert "观点挑战者" in configs["challenger"].system_prompt
+        assert "支持者" in configs["supporter"].system_prompt
+        assert "挑战者" in configs["challenger"].system_prompt

@@ -84,6 +84,7 @@ class Agent:
             search_history=self.search_history,
             search_config=search_config,
             name=self.name,
+            documents=self.documents,
         )
 
         # 对话分析器
@@ -108,11 +109,17 @@ class Agent:
         # 如果需要，可以在消息中合并文档池
         formatted_messages = self._format_messages_with_documents(messages)
 
-        return await self.response_handler.respond(
+        result = await self.response_handler.respond(
             messages=formatted_messages,
             system=self.system_prompt,
             interrupt=interrupt,
         )
+
+        # 为了向后兼容，返回 ResponseResult.text
+        # 但将引用信息存储在实例属性中，供需要时访问
+        self._last_citations_lines = result.citations_lines if result else []
+
+        return result.text if result else None
 
     def add_document(self, doc: dict) -> None:
         """添加文档到文档池

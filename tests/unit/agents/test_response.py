@@ -44,7 +44,10 @@ async def test_response_handler_returns_text():
             interrupt=asyncio.Event(),
         )
 
-    assert result == "Hello"
+    from mind.agents.response import ResponseResult
+
+    assert isinstance(result, ResponseResult)
+    assert result.text == "Hello"
 
 
 @pytest.mark.asyncio

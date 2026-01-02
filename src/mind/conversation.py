@@ -315,11 +315,102 @@ class ConversationManager:
 
             current_agent = self.agent_a if self.current == 0 else self.agent_b
 
+            # 工具调用：在特定轮次调用工具并注入结果
+            if (
+                self.enable_tools
+                and self.tool_interval > 0
+                and self.turn > 0
+                and self.turn % self.tool_interval == 0
+            ):
+                logger.info(f"第 {self.turn} 轮：调用工具获取上下文")
+                output.append(f"\n🔧 [工具调用] 第 {self.turn} 轮：正在分析对话历史...")
+
+                # 调用当前智能体的工具，传入对话历史
+                tool_result = await current_agent.query_tool(
+                    "总结当前对话", self.messages
+                )
+
+                # 如果工具返回有效结果，注入到对话历史
+                if tool_result:
+                    output.append(" ✅")
+                    tool_message = cast(
+                        MessageParam,
+                        {
+                            "role": "user",
+                            "content": f"[系统消息 - 上下文更新]\n{tool_result}",
+                        },
+                    )
+                    self.messages.append(tool_message)
+                    self.memory.add_message(
+                        tool_message["role"], cast(str, tool_message["content"])
+                    )
+                    logger.info(
+                        f"工具结果已注入对话历史，当前消息数: {len(self.messages)}"
+                    )
+                    output.append("")
+                else:
+                    output.append(" ⚠️ (无结果)")
+                    logger.warning(f"第 {self.turn} 轮工具调用未返回有效结果")
+                    output.append("")
+
+            # 智能网络搜索触发（关键词检测 + 固定间隔兜底）
+            if self._should_trigger_search():
+                # 从对话历史中提取搜索关键词
+                search_query = self._extract_search_query()
+
+                if search_query:
+                    logger.info(f"第 {self.turn} 轮：触发网络搜索")
+                    search_msg = (
+                        f"\n🌐 [网络搜索] 第 {self.turn} 轮："
+                        f"正在搜索 '{search_query}'..."
+                    )
+                    output.append(search_msg)
+
+                    # 导入搜索函数（避免循环导入）
+                    from mind.tools.search_tool import search_web
+
+                    # 执行搜索
+                    search_result = await search_web(search_query, max_results=3)
+
+                    # 如果搜索返回有效结果，注入到对话历史
+                    if search_result:
+                        output.append(" ✅")
+                        search_message = cast(
+                            MessageParam,
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"[系统消息 - 网络搜索结果]\n{search_result}"
+                                ),
+                            },
+                        )
+                        self.messages.append(search_message)
+                        self.memory.add_message(
+                            search_message["role"], cast(str, search_message["content"])
+                        )
+                        logger.info(
+                            f"搜索结果已注入对话历史，当前消息数: {len(self.messages)}"
+                        )
+                        output.append("")
+                    else:
+                        output.append(" ⚠️ (无结果)")
+                        logger.warning(f"第 {self.turn} 轮网络搜索未返回有效结果")
+                        output.append("")
+
             output.append(f"### [{current_agent.name}]")
             response = await current_agent.respond(self.messages, self.interrupt)
 
             if response is not None:
-                # 移除可能的前缀
+                output.append(response)
+                output.append("")
+
+                # 添加引用信息（如果有）
+                if hasattr(current_agent, "_last_citations_lines"):
+                    citations_lines = current_agent._last_citations_lines
+                    if citations_lines:
+                        output.extend(citations_lines)
+
+                # 移除可能的前缀（用于清理消息历史）
                 patterns_to_remove = [
                     rf"^\[{re.escape(current_agent.name)}\]:\s*",
                     rf"^\[{re.escape(current_agent.name)}]\uFF1A\s*",
@@ -330,9 +421,6 @@ class ConversationManager:
                 ]
                 for pattern in patterns_to_remove:
                     response = re.sub(pattern, "", response, count=1).lstrip()
-
-                output.append(response)
-                output.append("")
 
                 # 检测对话结束标记（非交互式模式自动接受）
                 end_result = self.end_detector.detect(
