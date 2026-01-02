@@ -158,6 +158,13 @@ class FlowController:
 
             if response is not None:
                 output.append(response)
+
+                # 添加引用行（如果有）
+                if hasattr(current_agent, "_last_citations_lines"):
+                    citations_lines = current_agent._last_citations_lines
+                    if citations_lines:
+                        output.extend(citations_lines)
+
                 output.append("")
 
                 # 检测对话结束标记
@@ -300,13 +307,12 @@ class FlowController:
             self.manager.turn += 1
             logger.debug(f"轮次 {self.manager.turn}: {current_agent.name} 响应完成")
 
-            # 显示 token 进度
-            if self.manager.turn % 3 == 0:
-                ProgressDisplay.show_token_progress(
-                    self.manager.memory._total_tokens,
-                    self.manager.memory.config.max_context,
-                )
-                console.print()  # 进度后空行
+            # 显示 token 进度（每轮显示）
+            ProgressDisplay.show_token_progress(
+                self.manager.memory._total_tokens,
+                self.manager.memory.config.max_context,
+            )
+            console.print()  # 进度后换行
 
             # 检测对话结束标记
             end_result = self.manager.end_detector.detect(

@@ -111,6 +111,8 @@ class TestFlowController:
         manager.messages = []
         manager.memory = MagicMock()
         manager.memory.get_status = MagicMock(return_value="green")
+        manager.memory._total_tokens = 1000
+        manager.memory.config.max_context = 150000
         manager.turn = 0
         manager.enable_tools = False
         manager.search_interval = 0
@@ -161,6 +163,8 @@ class TestFlowController:
         manager.messages = []
         manager.memory = MagicMock()
         manager.memory.get_status = MagicMock(return_value="green")
+        manager.memory._total_tokens = 1000
+        manager.memory.config.max_context = 150000
         manager.turn = 0
         manager.enable_tools = False
         manager.search_interval = 0
