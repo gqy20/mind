@@ -74,16 +74,12 @@ class SummarizerAgent:
             "2. **反对观点总结**：提取挑战者的主要质疑和反例\n"
             "3. **关键共识点**：双方达成一致的地方\n"
             "4. **主要分歧点**：双方仍有争议的地方\n\n"
-            "## 格式要求（严格遵守）\n\n"
+            "## 格式要求\n\n"
             "- 使用简洁、清晰的语言\n"
             "- 总结不超过 300 字\n"
             "- 使用项目符号列表组织内容\n"
             "- 客观中立，不偏袒任何一方\n"
-            "- **确保每个字符只出现一次，不要重复字符或词语**\n"
-            "- **使用标准的 markdown 格式**：\n"
-            "  - 标题用 `##` 开头\n"
-            "  - 列表项用 `- ` 开头\n"
-            "  - 加粗用 `**文本**` 格式\n\n"
+            "- 使用标准的 markdown 格式\n\n"
             "## 注意事项\n\n"
             "- 只基于提供的对话内容进行总结\n"
             "- 不要添加对话中没有的信息\n"
@@ -140,6 +136,7 @@ class SummarizerAgent:
         try:
             # 调用 API 生成总结
             response_text = ""
+            has_text_delta = False  # 标记是否处理过 text_delta
 
             async with self.client.messages.stream(
                 model=self.model,
@@ -153,16 +150,17 @@ class SummarizerAgent:
                         logger.debug("总结生成被中断")
                         return "对话总结被中断"
 
-                    # 处理文本增量
+                    # 处理文本增量（新格式）
                     if event.type == "content_block_delta":
                         if hasattr(event, "delta") and hasattr(event.delta, "type"):
                             if event.delta.type == "text_delta":
+                                has_text_delta = True  # 标记已处理增量
                                 text = getattr(event.delta, "text", "")
                                 response_text += text
                                 print(text, end="", flush=True)
 
-                    # 处理旧格式文本事件
-                    elif event.type == "text":
+                    # 处理旧格式文本事件（只在没有处理过 text_delta 时）
+                    elif event.type == "text" and not has_text_delta:
                         text = getattr(event, "text", "")
                         response_text += text
                         print(text, end="", flush=True)
