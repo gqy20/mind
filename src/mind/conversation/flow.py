@@ -207,6 +207,20 @@ class FlowController:
             # 切换到下一个智能体
             self.manager.current = 1 - self.manager.current
 
+        # 对话结束后生成总结（无论是正常结束还是因上下文超限）
+        if not self.manager.summary:
+            self.manager.summary = await self.manager._summarize_conversation()
+
+        # 添加总结到输出（如果有且是字符串）
+        summary = self.manager.summary
+        if summary and isinstance(summary, str):
+            output.append("")
+            output.append("---")
+            output.append("")
+            output.append("## 📝 对话总结")
+            output.append("")
+            output.append(summary)
+
         # 添加统计和结尾
         output.append("")
         output.append("---")
