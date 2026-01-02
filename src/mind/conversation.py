@@ -891,8 +891,18 @@ class ConversationManager:
             proposal.confirm()
             logger.info("用户确认结束对话")
 
+            # 生成对话总结
             print(f"\n{'=' * 60}")
-            print("✅ 对话已结束")
+            print("正在生成对话总结...")
+            print(f"{'=' * 60}\n")
+            self.summary = await self._summarize_conversation()
+
+            print(f"\n{'=' * 60}")
+            print("📝 对话总结")
+            print(f"{'=' * 60}")
+            print(f"{self.summary}\n")
+            print(f"{'=' * 60}")
+            print("💾 对话已保存（包含总结）")
             print(f"{'=' * 60}\n")
 
             # 保存对话并退出
