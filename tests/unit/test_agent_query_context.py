@@ -7,8 +7,6 @@ Agent query_tool 重构的单元测试
 - 返回对话摘要而非项目结构
 """
 
-from unittest.mock import MagicMock
-
 import pytest
 from anthropic.types import MessageParam
 
@@ -20,12 +18,7 @@ class TestQueryToolWithContext:
 
     def test_query_tool_requires_messages_parameter(self):
         """测试：query_tool 需要 messages 参数"""
-        # Arrange
-        agent = MagicMock(spec=Agent)
-        agent.name = "TestAgent"
-        agent.tool_agent = None  # 不需要 tool_agent
-
-        # Act & Assert - 检查方法签名
+        # Arrange & Act & Assert - 检查方法签名
         import inspect
 
         sig = inspect.signature(Agent.query_tool)
@@ -37,11 +30,8 @@ class TestQueryToolWithContext:
     @pytest.mark.asyncio
     async def test_query_tool_analyzes_conversation_history(self):
         """测试：query_tool 分析对话历史"""
-        # Arrange
-
-        agent = MagicMock(spec=Agent)
-        agent.name = "TestAgent"
-        agent.tool_agent = None  # 移除对外部 tool_agent 的依赖
+        # Arrange - 使用真实的 Agent 而不是 mock
+        agent = Agent(name="测试", system_prompt="你是助手")
 
         # 创建真实的 messages
         messages: list[MessageParam] = [
@@ -57,7 +47,7 @@ class TestQueryToolWithContext:
         ]
 
         # Act - 调用分析对话上下文
-        result = await Agent.query_tool(agent, "分析当前对话", messages)
+        result = await agent.query_tool("分析当前对话", messages)
 
         # Assert - 应该返回对话摘要
         assert result is not None
@@ -67,15 +57,13 @@ class TestQueryToolWithContext:
     @pytest.mark.asyncio
     async def test_query_tool_returns_none_with_empty_messages(self):
         """测试：空对话历史时返回 None"""
-        # Arrange
-        agent = MagicMock(spec=Agent)
-        agent.name = "TestAgent"
-        agent.tool_agent = None
+        # Arrange - 使用真实的 Agent 而不是 mock
+        agent = Agent(name="测试", system_prompt="你是助手")
 
         messages: list[MessageParam] = []
 
         # Act
-        result = await Agent.query_tool(agent, "分析对话", messages)
+        result = await agent.query_tool("分析对话", messages)
 
         # Assert
         assert result is None
@@ -83,10 +71,8 @@ class TestQueryToolWithContext:
     @pytest.mark.asyncio
     async def test_query_tool_extracts_key_viewpoints(self):
         """测试：提取对话中的关键观点"""
-        # Arrange
-        agent = MagicMock(spec=Agent)
-        agent.name = "TestAgent"
-        agent.tool_agent = None
+        # Arrange - 使用真实的 Agent 而不是 mock
+        agent = Agent(name="测试", system_prompt="你是助手")
 
         messages: list[MessageParam] = [
             {"role": "user", "content": "讨论开源软件的商业模式"},
@@ -101,7 +87,7 @@ class TestQueryToolWithContext:
         ]
 
         # Act
-        result = await Agent.query_tool(agent, "总结观点", messages)
+        result = await agent.query_tool("总结观点", messages)
 
         # Assert - 应该包含关键信息
         assert result is not None

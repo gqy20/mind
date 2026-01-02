@@ -41,13 +41,19 @@ class TestAgentErrorHandling:
         messages = [{"role": "user", "content": "你好"}]
         interrupt = asyncio.Event()
 
-        # Mock API 抛出错误
-        mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(  # noqa: E501
-            side_effect=self._make_error(500, "API 请求失败")
-        )
+        # Mock API 抛出错误 - 需要在迭代过程中抛出
+        async def error_stream_iter():
+            # 在第一次迭代时抛出错误
+            raise self._make_error(500, "API 请求失败")
+            yield  # noqa: B901  # 使其成为异步生成器
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        mock_stream = AsyncMock()
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
+        mock_stream.__aexit__ = AsyncMock(return_value=None)
+        mock_stream.__aiter__ = lambda self: error_stream_iter()
+
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
@@ -64,12 +70,18 @@ class TestAgentErrorHandling:
         messages = [{"role": "user", "content": "你好"}]
         interrupt = asyncio.Event()
 
-        mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(
-            side_effect=self._make_error(401, "Invalid API Key")
-        )
+        # Mock API 抛出错误 - 需要在迭代过程中抛出
+        async def error_stream_iter():
+            raise self._make_error(401, "Invalid API Key")
+            yield  # noqa: B901
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        mock_stream = AsyncMock()
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
+        mock_stream.__aexit__ = AsyncMock(return_value=None)
+        mock_stream.__aiter__ = lambda self: error_stream_iter()
+
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
@@ -88,12 +100,18 @@ class TestAgentErrorHandling:
         messages = [{"role": "user", "content": "你好"}]
         interrupt = asyncio.Event()
 
-        mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(
-            side_effect=self._make_error(429, "Rate limit exceeded")
-        )
+        # Mock API 抛出错误 - 需要在迭代过程中抛出
+        async def error_stream_iter():
+            raise self._make_error(429, "Rate limit exceeded")
+            yield  # noqa: B901
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        mock_stream = AsyncMock()
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
+        mock_stream.__aexit__ = AsyncMock(return_value=None)
+        mock_stream.__aiter__ = lambda self: error_stream_iter()
+
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
@@ -112,10 +130,18 @@ class TestAgentErrorHandling:
         messages = [{"role": "user", "content": "你好"}]
         interrupt = asyncio.Event()
 
-        mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(side_effect=TimeoutError("Request timeout"))
+        # Mock API 抛出错误 - 需要在迭代过程中抛出
+        async def error_stream_iter():
+            raise TimeoutError("Request timeout")
+            yield  # noqa: B901
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        mock_stream = AsyncMock()
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
+        mock_stream.__aexit__ = AsyncMock(return_value=None)
+        mock_stream.__aiter__ = lambda self: error_stream_iter()
+
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 

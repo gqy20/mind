@@ -83,7 +83,8 @@ class TestAgentToolUse:
                 return mock_stream
             return mock_stream2
 
-        with patch.object(agent.client.messages, "stream", side_effect=side_effect):
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", side_effect=side_effect):
             # Mock _search_sync 返回原始搜索结果
             mock_results = [
                 {
@@ -122,7 +123,8 @@ class TestAgentToolUse:
 
         mock_stream = MockAsyncStream(events)
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             interrupt = asyncio.Event()
 
             # Act
@@ -150,7 +152,8 @@ class TestAgentToolUse:
         interrupt = asyncio.Event()
         interrupt.set()  # 立即设置中断
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        # 新架构: agent.client 是 AnthropicClient，直接 patch stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             response = await agent.respond(messages, interrupt)
 

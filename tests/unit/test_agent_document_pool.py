@@ -28,18 +28,24 @@ class TestAgentDocumentPool:
 
     def test_init_with_max_documents_config(self):
         """测试：应支持配置最大文档数"""
-        # Arrange & Act
-        agent = Agent(name="测试", system_prompt="你是一个助手")
-        agent.max_documents = 10
+        # Arrange & Act - 新架构需要在初始化时配置
+        from mind.prompts import SettingsConfig
+
+        settings = SettingsConfig()
+        settings.documents.max_documents = 10
+        agent = Agent(name="测试", system_prompt="你是一个助手", settings=settings)
 
         # Assert
         assert agent.max_documents == 10, "应支持自定义最大文档数"
 
     def test_init_with_document_ttl_config(self):
         """测试：应支持配置文档存活时间"""
-        # Arrange & Act
-        agent = Agent(name="测试", system_prompt="你是一个助手")
-        agent.document_ttl = 5
+        # Arrange & Act - 新架构需要在初始化时配置
+        from mind.prompts import SettingsConfig
+
+        settings = SettingsConfig()
+        settings.documents.ttl = 5
+        agent = Agent(name="测试", system_prompt="你是一个助手", settings=settings)
 
         # Assert
         assert agent.document_ttl == 5, "应支持自定义文档存活时间"
@@ -104,9 +110,12 @@ class TestAgentDocumentOperations:
     @pytest.mark.asyncio
     async def test_max_documents_limit(self):
         """测试：超过最大文档数时应移除最旧的文档"""
-        # Arrange
-        agent = Agent(name="测试", system_prompt="你是一个助手")
-        agent.max_documents = 2
+        # Arrange - 新架构需要在初始化时设置 max_documents
+        from mind.prompts import SettingsConfig
+
+        settings = SettingsConfig()
+        settings.documents.max_documents = 2
+        agent = Agent(name="测试", system_prompt="你是一个助手", settings=settings)
 
         doc1 = {"title": "旧文档", "type": "document", "citations": {"enabled": True}}
         doc2 = {"title": "中间文档", "type": "document", "citations": {"enabled": True}}
@@ -241,19 +250,23 @@ class TestAgentDocumentCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_documents_by_ttl(self):
         """测试：应能根据 TTL 清理过期文档"""
-        # Arrange
-        agent = Agent(name="测试", system_prompt="你是一个助手")
-        agent.document_ttl = 3
+        # Arrange - 新架构需要在初始化时设置 document_ttl
+        from mind.prompts import SettingsConfig
+
+        settings = SettingsConfig()
+        settings.documents.ttl = 3
+        agent = Agent(name="测试", system_prompt="你是一个助手", settings=settings)
 
         # 模拟添加了一些带 age 计数的文档
-        agent.search_documents = [
+        # 新架构：直接操作 documents 对象
+        agent.documents.documents = [
             {"title": "新文档", "age": 0},
             {"title": "较旧文档", "age": 2},
             {"title": "过期文档", "age": 4},
         ]
 
-        # Act
-        agent._cleanup_old_documents()
+        # Act - 使用 documents.cleanup_old()
+        agent.documents.cleanup_old()
 
         # Assert
         assert len(agent.search_documents) == 2, "应清理超过 TTL 的文档"
@@ -265,16 +278,21 @@ class TestAgentDocumentCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_zero_ttl_keeps_all(self):
         """测试：TTL 为 0 时不应清理任何文档"""
-        # Arrange
-        agent = Agent(name="测试", system_prompt="你是一个助手")
-        agent.document_ttl = 0
-        agent.search_documents = [
+        # Arrange - 新架构需要在初始化时设置 document_ttl
+        from mind.prompts import SettingsConfig
+
+        settings = SettingsConfig()
+        settings.documents.ttl = 0
+        agent = Agent(name="测试", system_prompt="你是一个助手", settings=settings)
+
+        # 模拟添加了一些带 age 计数的文档
+        agent.documents.documents = [
             {"title": "文档1", "age": 100},
             {"title": "文档2", "age": 200},
         ]
 
-        # Act
-        agent._cleanup_old_documents()
+        # Act - 使用 documents.cleanup_old()
+        agent.documents.cleanup_old()
 
         # Assert
         assert len(agent.search_documents) == 2, "TTL 为 0 时不应清理文档"

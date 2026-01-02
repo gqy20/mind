@@ -63,7 +63,8 @@ class TestAgentRespond:
         mock_stream.__aexit__ = AsyncMock(return_value=None)
         mock_stream.__aiter__ = lambda self: mock_stream_iter()
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        # 新架构: agent.client 是 AnthropicClient，需要 patch 其 stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
@@ -118,7 +119,8 @@ class TestAgentRespond:
         mock_stream.__aexit__ = AsyncMock(return_value=None)
         mock_stream.__aiter__ = lambda self: mock_stream_iter()
 
-        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
+        # 新架构: patch AnthropicClient.stream 方法
+        with patch.object(agent.client, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
