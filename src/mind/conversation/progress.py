@@ -21,22 +21,17 @@ class ProgressDisplay:
         """
         percentage = min(tokens / max_tokens, 1.0)
 
-        # 根据使用率选择颜色
-        if percentage < 0.8:
-            color = "[green]"
-        elif percentage < 0.95:
-            color = "[yellow]"
-        else:
-            color = "[red]"
-
         # 计算进度条宽度
         bar_width = 30
         filled = int(bar_width * percentage)
         bar = "█" * filled + "░" * (bar_width - filled)
 
-        # 打印进度条（使用 \\r 覆盖当前行）
-        progress_text = (
-            f"\\r{color}Token:[{bar}] {tokens}/{max_tokens} "
-            f"({percentage:.1%})[/{color}]"
+        # 直接输出进度条到 stderr（使用纯文本，不使用 Rich 颜色）
+        import sys
+
+        print(
+            f"\rToken:[{bar}] {tokens}/{max_tokens} ({percentage:.1%})",
+            end="",
+            file=sys.stderr,
+            flush=True,
         )
-        console.print(progress_text, end="")
