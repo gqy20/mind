@@ -45,6 +45,7 @@ class AnthropicClient:
         messages: list[MessageParam],
         system: str,
         tools: list[ToolParam] | None = None,
+        documents: list | None = None,
     ) -> AsyncIterator["Event"]:
         """流式生成 - 返回原始事件流
 
@@ -52,16 +53,24 @@ class AnthropicClient:
             messages: 对话历史
             system: 系统提示词
             tools: 可用的工具定义
+            documents: Citations API 文档列表
 
         Yields:
             API 返回的原始事件
         """
-        async with self.client.messages.stream(
-            model=self.model,
-            max_tokens=2048,
-            system=system,
-            messages=messages,
-            tools=tools or [],
-        ) as stream:
+        # 构建基本参数
+        kwargs = {
+            "model": self.model,
+            "max_tokens": 2048,
+            "system": system,
+            "messages": messages,
+            "tools": tools or [],
+        }
+
+        # 只有在有 documents 时才添加该参数
+        if documents:
+            kwargs["documents"] = documents
+
+        async with self.client.messages.stream(**kwargs) as stream:  # type: ignore[arg-type]
             async for event in stream:
                 yield event

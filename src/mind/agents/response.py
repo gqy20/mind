@@ -88,12 +88,16 @@ class ResponseHandler:
 
         logger.debug(f"智能体 {self.name} 开始响应，历史消息数: {len(messages)}")
 
+        # 获取 documents 列表（用于 Citations API）
+        docs_list = self.documents.documents if self.documents else None
+
         try:
             # 第一轮：生成响应（可能包含工具调用）
             async for event in self.client.stream(
                 messages=messages,
                 system=system,
                 tools=_get_tools_schema(),
+                documents=docs_list,
             ):
                 if interrupt.is_set():
                     logger.debug(f"智能体 {self.name} 响应中途被中断")
@@ -238,10 +242,14 @@ class ResponseHandler:
         has_text_delta = False  # 标记是否处理过 text_delta
         citations_buffer: list[dict] = []  # 捕获引用信息
 
+        # 获取 documents 列表（用于 Citations API）
+        docs_list = self.documents.documents if self.documents else None
+
         try:
             async for event in self.client.stream(
                 messages=messages,
                 system=system,
+                documents=docs_list,
             ):
                 if interrupt.is_set():
                     logger.debug(f"智能体 {self.name} 继续响应被中断")
