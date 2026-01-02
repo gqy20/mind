@@ -17,10 +17,6 @@ permissions:
 
 jobs:
   chat:
-    if: |
-      contains(github.event.issue.labels.*.name, 'chat') ||
-      contains(github.event.issue.labels.*.name, '对话') ||
-      startsWith(github.event.issue.title, '[对话]')
     name: Run Conversation via Issue
     runs-on: ubuntu-latest
 
@@ -39,14 +35,41 @@ jobs:
           uv venv .venv
           uv sync --group dev
 
+      - name: Get issue details
+        id: get_issue
+        run: |
+          # 确定使用哪个 issue 编号
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ISSUE_NUMBER=${{ github.event.inputs.issue_number }}
+          else
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          fi
+          echo "number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+          # 获取 issue 详情
+          gh issue view "$ISSUE_NUMBER" --json title,body --jq '.title, .body' > /tmp/issue.json
+          echo "title=$(jq -r '.[0]' /tmp/issue.json)" >> $GITHUB_OUTPUT
+          echo "body=$(jq -r '.[1]' /tmp/issue.json)" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run conversation and post comment
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ steps.get_issue.outputs.title }}
+          ISSUE_BODY: ${{ steps.get_issue.outputs.body }}
+          ISSUE_NUMBER: ${{ steps.get_issue.outputs.number }}
         run: |
+          # 检查是否为对话 issue
+          if ! echo "$ISSUE_TITLE" | grep -q '^\[对话\]'; then
+            if ! gh issue view "$ISSUE_NUMBER" --json labels --jq '.labels[].name' | grep -qE '(chat|对话)'; then
+              echo "This is not a chat issue, skipping..."
+              exit 0
+            fi
+          fi
+
           # 构建主题（如果 body 存在则换行拼接）
           if [ -n "$ISSUE_BODY" ]; then
             TOPIC="$ISSUE_TITLE"$'\n\n'"$ISSUE_BODY"

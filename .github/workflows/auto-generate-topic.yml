@@ -52,13 +52,29 @@ jobs:
           echo "topic2=$TOPIC2" >> $GITHUB_OUTPUT
 
       - name: Create issues with generated topics
+        id: create_issues
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TOPIC1: ${{ steps.read_topics.outputs.topic1 }}
           TOPIC2: ${{ steps.read_topics.outputs.topic2 }}
         run: |
-          # 创建第一个 issue
-          gh issue create --title "[对话] $TOPIC1" --body "$TOPIC1" --label "chat"
+          # 创建第一个 issue 并记录编号
+          ISSUE1=$(gh issue create --title "[对话] $TOPIC1" --body "$TOPIC1" --label "chat" --json number --jq '.number')
+          echo "issue1=$ISSUE1" >> $GITHUB_OUTPUT
           sleep 2
-          # 创建第二个 issue
-          gh issue create --title "[对话] $TOPIC2" --body "$TOPIC2" --label "chat"
+          # 创建第二个 issue 并记录编号
+          ISSUE2=$(gh issue create --title "[对话] $TOPIC2" --body "$TOPIC2" --label "chat" --json number --jq '.number')
+          echo "issue2=$ISSUE2" >> $GITHUB_OUTPUT
+
+      - name: Trigger conversation for issue 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run issue-chat.yml -f issue_number=${{ steps.create_issues.outputs.issue1 }}
+          sleep 5
+
+      - name: Trigger conversation for issue 2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run issue-chat.yml -f issue_number=${{ steps.create_issues.outputs.issue2 }}
