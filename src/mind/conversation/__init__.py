@@ -3,7 +3,7 @@
 这个模块被拆分为多个子模块，每个模块负责一个特定的功能域。
 """
 
-__all__ = ["ConversationManager", "ProgressDisplay"]
+__all__ = ["ConversationManager", "ProgressDisplay", "SearchHandler"]
 
 
 def __getattr__(name: str):
@@ -23,5 +23,9 @@ def __getattr__(name: str):
         from mind.conversation import progress
 
         return progress.ProgressDisplay
+    elif name == "SearchHandler":
+        from mind.conversation import search_handler
+
+        return search_handler.SearchHandler
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

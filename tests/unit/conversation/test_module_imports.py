@@ -24,10 +24,9 @@ def test_progress_display_can_be_imported():
 
 def test_search_handler_can_be_imported():
     """测试 SearchHandler 可以导入"""
-    with pytest.raises(ImportError):
-        from mind.conversation.search_handler import SearchHandler
+    from mind.conversation.search_handler import SearchHandler
 
-        assert SearchHandler is not None
+    assert SearchHandler is not None
 
 
 def test_interaction_handler_can_be_imported():
