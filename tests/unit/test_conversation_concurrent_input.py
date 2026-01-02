@@ -34,7 +34,7 @@ class TestConcurrentInputMonitoring:
                 return None
             return "A的回复"
 
-        # 使用一个可控制的函数来模拟 _is_input_ready
+        # 使用一个可控制的函数来模拟 is_input_ready
         input_ready = False
 
         def mock_is_input_ready():
@@ -49,8 +49,10 @@ class TestConcurrentInputMonitoring:
             await asyncio.sleep(0.15)  # 等待后台任务检测到输入
 
         with patch.object(agent_a, "respond", side_effect=slow_respond):
+            # 更新 patch 路径到 FlowController
             with patch(
-                "mind.conversation._is_input_ready", side_effect=mock_is_input_ready
+                "mind.conversation.flow.InteractionHandler.is_input_ready",
+                side_effect=mock_is_input_ready,
             ):
                 # Act
                 input_task = asyncio.create_task(simulate_input_during_respond())
@@ -87,8 +89,11 @@ class TestConcurrentInputMonitoring:
         agent_b = Agent(name="B", system_prompt="你是B")
         manager = ConversationManager(agent_a=agent_a, agent_b=agent_b)
 
-        # 模拟 _is_input_ready 返回 True
-        with patch("mind.conversation._is_input_ready", return_value=True):
+        # 模拟 is_input_ready 返回 True
+        with patch(
+            "mind.conversation.interaction.InteractionHandler.is_input_ready",
+            return_value=True,
+        ):
             # Act
             if hasattr(manager, "_wait_for_user_input"):
                 await manager._wait_for_user_input()
@@ -134,8 +139,10 @@ class TestConcurrentInputIntegration:
             await asyncio.sleep(0.2)  # 等待后台任务检测
 
         with patch.object(agent_a, "respond", side_effect=slow_respond):
+            # 更新 patch 路径到 FlowController
             with patch(
-                "mind.conversation._is_input_ready", side_effect=mock_is_input_ready
+                "mind.conversation.flow.InteractionHandler.is_input_ready",
+                side_effect=mock_is_input_ready,
             ):
                 # Act
                 input_task = asyncio.create_task(trigger_input())

@@ -228,6 +228,27 @@ class FlowController:
             if search_query:
                 await self._execute_search_interactive(search_query)
 
+        # 检查是否触发工具调用
+        if (
+            self.manager.enable_tools
+            and self.manager.tool_interval > 0
+            and self.manager.turn % self.manager.tool_interval == 0
+            and self.manager.turn > 0
+        ):
+            tool_result = await current_agent.query_tool(
+                "总结当前对话", self.manager.messages
+            )
+            if tool_result:
+                # 将工具结果注入到对话历史
+                tool_message = MessageParam(
+                    role="user",
+                    content=f"[上下文更新]\n{tool_result}",
+                )
+                self.manager.messages.append(tool_message)
+                self.manager.memory.add_message(
+                    tool_message["role"], str(tool_message["content"])
+                )
+
         # 打印智能体名称
         print(f"\n[{current_agent.name}]: ", end="", flush=True)
 
