@@ -851,8 +851,15 @@ class ConversationManager:
             agent_name: 请求结束的智能体名称
             response: 完整响应（包含结束标记）
         """
-        # 清理响应用于显示
+        # 清理响应用于显示和保存
         clean_response = self.end_detector.clean_response(response)
+
+        # 先将清理后的响应添加到消息历史（无论用户选择结束还是继续）
+        formatted_content = f"[{agent_name}]: {clean_response}"
+        msg = cast(MessageParam, {"role": "assistant", "content": formatted_content})
+        self.messages.append(msg)
+        self.memory.add_message(msg["role"], cast(str, msg["content"]))
+        logger.info("已添加结束提议到消息历史（已清理 END 标记）")
 
         # 创建结束提议
         proposal = EndProposal(

@@ -4,6 +4,7 @@
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -17,6 +18,10 @@ from mind.prompts import SearchConfig, SettingsConfig
 
 if TYPE_CHECKING:
     from mind.tools import ToolAgent
+
+
+# 已知的智能体名称列表，用于清理角色名前缀
+KNOWN_AGENTS = ["支持者", "挑战者"]
 
 
 def _get_tools_schema() -> list[ToolParam]:
@@ -48,6 +53,37 @@ logger = get_logger("mind.agent")
 
 # 默认模型配置
 DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+
+
+def _clean_agent_name_prefix(text: str) -> str:
+    """清理文本开头的智能体角色名前缀
+
+    清理任意已知的智能体角色名前缀，如 "[支持者]: " 或 "[挑战者]: "。
+    这样可以防止 AI 错误地生成对方的角色名。
+
+    Args:
+        text: 原始文本
+
+    Returns:
+        清理后的文本
+    """
+    # 首先尝试清理已知的智能体角色名
+    for agent_name in KNOWN_AGENTS:
+        prefix = f"[{agent_name}]:"
+        if text.startswith(prefix):
+            return text[len(prefix) :].lstrip()
+
+        # 也检查不带方括号的格式
+        prefix_plain = f"{agent_name}:"
+        if text.startswith(prefix_plain):
+            return text[len(prefix_plain) :].lstrip()
+
+    # 如果没有匹配到已知角色名，使用正则表达式清理任意 [xxx]: 格式
+    # 但要小心不要清理类似 [1] 这样的引用标记
+    # 使用负向后顾断，确保 [xxx]: 中的 xxx 不是纯数字
+    text = re.sub(r"^\[([^\d][^\]]*)\]:\s*", "", text)
+
+    return text
 
 
 @dataclass
@@ -253,11 +289,8 @@ class Agent:
                             if delta_type == "text_delta":
                                 has_text_delta = True  # 标记已处理增量
                                 text = getattr(event.delta, "text", "")
-                                # 清理角色名前缀
-                                if text.startswith(f"[{self.name}]:"):
-                                    text = text[len(f"[{self.name}]:") :].lstrip()
-                                elif text.startswith(f"{self.name}:"):
-                                    text = text[len(f"{self.name}:") :].lstrip()
+                                # 清理角色名前缀（包括自己和其他已知智能体）
+                                text = _clean_agent_name_prefix(text)
 
                                 response_text += text
                                 print(text, end="", flush=True)
@@ -287,11 +320,8 @@ class Agent:
                     # 只在没有处理过 text_delta 时才处理，避免重复
                     elif event.type == "text" and not has_text_delta:
                         text = getattr(event, "text", "")
-                        # 清理角色名前缀
-                        if text.startswith(f"[{self.name}]:"):
-                            text = text[len(f"[{self.name}]:") :].lstrip()
-                        elif text.startswith(f"{self.name}:"):
-                            text = text[len(f"{self.name}:") :].lstrip()
+                        # 清理角色名前缀（包括自己和其他已知智能体）
+                        text = _clean_agent_name_prefix(text)
 
                         response_text += text
                         print(text, end="", flush=True)
@@ -502,11 +532,8 @@ class Agent:
                             if delta_type == "text_delta":
                                 has_text_delta = True  # 标记已处理增量
                                 text = getattr(event.delta, "text", "")
-                                # 清理角色名前缀
-                                if text.startswith(f"[{self.name}]:"):
-                                    text = text[len(f"[{self.name}]:") :].lstrip()
-                                elif text.startswith(f"{self.name}:"):
-                                    text = text[len(f"{self.name}:") :].lstrip()
+                                # 清理角色名前缀（包括自己和其他已知智能体）
+                                text = _clean_agent_name_prefix(text)
 
                                 response_text += text
                                 print(text, end="", flush=True)
@@ -536,11 +563,8 @@ class Agent:
                     # 只在没有处理过 text_delta 时才处理，避免重复
                     elif event.type == "text" and not has_text_delta:
                         text = getattr(event, "text", "")
-                        # 清理角色名前缀
-                        if text.startswith(f"[{self.name}]:"):
-                            text = text[len(f"[{self.name}]:") :].lstrip()
-                        elif text.startswith(f"{self.name}:"):
-                            text = text[len(f"{self.name}:") :].lstrip()
+                        # 清理角色名前缀（包括自己和其他已知智能体）
+                        text = _clean_agent_name_prefix(text)
 
                         response_text += text
                         print(text, end="", flush=True)

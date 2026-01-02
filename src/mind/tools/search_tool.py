@@ -6,9 +6,38 @@
 import asyncio
 from datetime import datetime
 from functools import partial, wraps
+from urllib.parse import urlparse
 
 from ddgs import DDGS
 from loguru import logger
+
+# NSFW 域名黑名单（从实际对话中收集的问题域名）
+NSFW_DOMAIN_BLOCKLIST = {
+    "wiki.evaafly.cc",
+    "brand.hinrijv.cc",
+    "hwmrz2.cccgg49.com",
+    "wiki.saostwdi.com",
+    "cgw666.com",
+    "ww.djteqdbi.org",
+}
+
+
+def _is_safe_domain(href: str) -> bool:
+    """检查域名是否安全
+
+    Args:
+        href: URL 链接
+
+    Returns:
+        True 表示安全，False 表示在黑名单中
+    """
+    try:
+        domain = urlparse(href).netloc.lower()
+        # 移除端口号
+        domain = domain.split(":")[0]
+        return domain not in NSFW_DOMAIN_BLOCKLIST
+    except Exception:
+        return True  # 解析失败时默认安全
 
 
 def _sync_wrapper(func):
@@ -79,11 +108,29 @@ async def search_web(query: str, max_results: int = 5) -> str | None:
             logger.warning(f"搜索未返回结果: {query}")
             return None
 
+        # 过滤 NSFW 域名
+        filtered_results = []
+        blocked_count = 0
+        for r in results:
+            href = r.get("href", "")
+            if href and not _is_safe_domain(href):
+                blocked_count += 1
+                logger.debug(f"过滤不安全域名: {href}")
+                continue
+            filtered_results.append(r)
+
+        if blocked_count > 0:
+            logger.info(f"过滤了 {blocked_count} 个不安全域名")
+
+        if not filtered_results:
+            logger.warning(f"所有搜索结果都被过滤: {query}")
+            return None
+
         # 格式化结果 - 使用引用标记格式
         summary_parts = [f"**网络搜索结果**: {query}\n"]
         summary_parts.append("请在回复时使用引用标记，例如：`根据研究[1]，...`\n")
 
-        for i, r in enumerate(results[:max_results], 1):
+        for i, r in enumerate(filtered_results[:max_results], 1):
             title = r.get("title", "无标题")
             href = r.get("href", "")
             body = r.get("body", "")
@@ -98,7 +145,7 @@ async def search_web(query: str, max_results: int = 5) -> str | None:
             summary_parts.append("")
 
         result = "\n".join(summary_parts)
-        logger.info(f"搜索完成: {query}, 返回 {len(results)} 条结果")
+        logger.info(f"搜索完成: {query}, 返回 {len(filtered_results)} 条结果")
         return result
 
     except Exception as e:
@@ -145,16 +192,33 @@ async def search_web_as_document(query: str, max_results: int = 5) -> dict | Non
             logger.warning(f"搜索未返回结果: {query}")
             return None
 
+        # 过滤 NSFW 域名
+        filtered_results = []
+        blocked_count = 0
+        for r in results:
+            href = r.get("href", "")
+            if href and not _is_safe_domain(href):
+                blocked_count += 1
+                logger.debug(f"过滤不安全域名: {href}")
+                continue
+            filtered_results.append(r)
+
+        if blocked_count > 0:
+            logger.info(f"过滤了 {blocked_count} 个不安全域名")
+
+        if not filtered_results:
+            logger.warning(f"所有搜索结果都被过滤: {query}")
+            return None
+
         # 转换为 content blocks（每个搜索结果作为一个可引用的块）
-        content_blocks = [_format_result_as_block(r) for r in results[:max_results]]
+        content_blocks = [
+            _format_result_as_block(r) for r in filtered_results[:max_results]
+        ]
 
         # 构建文档结构
         document = {
             "type": "document",
-            "source": {
-                "type": "content",
-                "content": content_blocks,
-            },
+            "source": {"type": "content", "content": content_blocks},
             "title": f"搜索结果: {query}",
             "context": f"搜索时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             "citations": {"enabled": True},
