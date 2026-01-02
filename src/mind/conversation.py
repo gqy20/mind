@@ -32,6 +32,7 @@ from mind.memory import MemoryManager
 
 if TYPE_CHECKING:
     from mind.search_history import SearchHistory
+    from mind.summarizer import SummarizerAgent
 
 logger = get_logger("mind.conversation")
 
@@ -92,6 +93,8 @@ class ConversationManager:
             ConversationEndConfig(require_confirmation=True)
         )
     )
+    # 总结智能体（专门用于总结对话）
+    summarizer_agent: "SummarizerAgent | None" = field(default=None)
 
     def __post_init__(self):
         """初始化后处理：配置工具智能体"""
@@ -120,6 +123,12 @@ class ConversationManager:
             self.agent_a.tool_agent = tool_agent
             self.agent_b.tool_agent = tool_agent
             logger.info("工具扩展已启用，两个智能体共享 ToolAgent")
+
+        # 初始化总结智能体
+        from mind.summarizer import SummarizerAgent
+
+        self.summarizer_agent = SummarizerAgent()
+        logger.info("总结智能体已初始化")
 
     def save_conversation(self) -> Path:
         """保存对话到 JSON 文件
@@ -174,45 +183,24 @@ class ConversationManager:
     async def _summarize_conversation(self) -> str:
         """生成对话总结
 
-        使用当前智能体对整体对话进行总结。
+        使用专门的总结智能体对整体对话进行总结。
 
         Returns:
             对话总结文本
         """
-        # 构建总结提示词
-        content_preview = chr(
-            10
-        ).join(
-            f"- {msg['role']}: {(msg['content'][:100] if isinstance(msg['content'], str) else str(cast(str, msg['content']))[:100])}..."  # noqa: E501
-            for msg in self.messages[-20:]
-        )
-        summary_prompt = f"""请对以下对话进行总结，包括：
-
-主题：{self.topic}
-
-对话内容：
-{content_preview}
-
-请提供：
-1. 核心观点总结（支持者的主要论点）
-2. 反对观点总结（挑战者的主要论点）
-3. 关键共识点
-4. 主要分歧点
-
-请用简洁的语言总结，不超过 300 字。"""
-
-        # 使用 agent_a 生成总结
-        messages_for_summary: list[MessageParam] = [
-            cast(MessageParam, {"role": "user", "content": summary_prompt})
-        ]
+        if not self.summarizer_agent:
+            logger.warning("总结智能体未初始化")
+            return "对话总结功能不可用"
 
         try:
-            response = await self.agent_a.respond(messages_for_summary, asyncio.Event())
-            summary = response or "对话总结生成失败"
-            logger.info(f"对话总结已生成: {len(summary)} 字")
+            summary = await self.summarizer_agent.summarize(
+                messages=self.messages,
+                topic=self.topic,
+                interrupt=asyncio.Event(),
+            )
             return summary
         except Exception as e:
-            logger.error(f"生成对话总结失败: {e}")
+            logger.exception(f"生成对话总结失败: {e}")
             return "对话总结生成失败"
 
     def _show_token_progress(self):
