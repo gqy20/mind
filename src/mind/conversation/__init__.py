@@ -3,7 +3,25 @@
 这个模块被拆分为多个子模块，每个模块负责一个特定的功能域。
 """
 
-# 模块尚未创建，将在实现后移除此注释
-from mind.conversation.manager import ConversationManager  # type: ignore
+__all__ = ["ConversationManager", "ProgressDisplay"]
 
-__all__ = ["ConversationManager"]
+
+def __getattr__(name: str):
+    """延迟导入模块，避免循环导入
+
+    Args:
+        name: 要导入的名称
+
+    Returns:
+        导入的对象
+    """
+    if name == "ConversationManager":
+        from mind.conversation import manager
+
+        return manager.ConversationManager
+    elif name == "ProgressDisplay":
+        from mind.conversation import progress
+
+        return progress.ProgressDisplay
+    else:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

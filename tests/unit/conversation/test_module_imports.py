@@ -17,10 +17,9 @@ def test_conversation_manager_can_be_imported():
 
 def test_progress_display_can_be_imported():
     """测试 ProgressDisplay 可以导入"""
-    with pytest.raises(ImportError):
-        from mind.conversation.progress import ProgressDisplay
+    from mind.conversation.progress import ProgressDisplay
 
-        assert ProgressDisplay is not None
+    assert ProgressDisplay is not None
 
 
 def test_search_handler_can_be_imported():
