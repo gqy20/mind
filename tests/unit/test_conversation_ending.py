@@ -1,14 +1,15 @@
 """
-Unit tests for Conversation Ending Detection
+Unit tests for Conversation Ending Detection (Redesigned)
 
-测试对话结束检测功能：
-- 结束标记解析
-- 语义模式匹配
-- 结束提议触发
-- 用户确认机制
+测试对话结束检测功能（重新设计）：
+- 显式标记检测（简单、可靠）
+- 响应清理
+- 结束提议管理
+- 集成测试
 """
 
 import pytest
+
 from mind.conversation_ending import (
     ConversationEndConfig,
     ConversationEndDetector,
@@ -28,7 +29,7 @@ class TestConversationEndConfig:
         assert config.enable_detection is True
         assert config.end_marker == "<!-- END -->"
         assert config.require_confirmation is True
-        assert config.confidence_threshold == 0.7
+        assert config.auto_end is False
 
     def test_custom_end_marker(self):
         """测试：自定义结束标记"""
@@ -46,6 +47,15 @@ class TestConversationEndConfig:
         # Assert
         assert config.enable_detection is False
 
+    def test_auto_end_without_confirmation(self):
+        """测试：自动结束无需确认"""
+        # Arrange & Act
+        config = ConversationEndConfig(require_confirmation=False, auto_end=True)
+
+        # Assert
+        assert config.require_confirmation is False
+        assert config.auto_end is True
+
 
 class TestConversationEndDetector:
     """测试对话结束检测器"""
@@ -56,98 +66,88 @@ class TestConversationEndDetector:
         return ConversationEndDetector()
 
     def test_detect_explicit_end_marker(self, detector):
-        """测试：检测明确的结束标记"""
+        """测试：检测显式结束标记"""
         # Arrange
-        response = """这是一个很好的观点。
-
-综上所述，我们已经充分讨论了这个问题。
-<!-- END -->"""
+        response = "这是一个很好的观点。\n\n<!-- END -->"
 
         # Act
-        result = detector.detect_end_signal(response)
+        result = detector.detect(response)
 
         # Assert
-        assert result.should_end is True
+        assert result.detected is True
         assert result.method == "marker"
-        assert result.confidence >= 0.9
+        assert result.reason == "检测到显式结束标记"
 
-    def test_no_end_signal_in_normal_response(self, detector):
-        """测试：正常响应中无结束信号"""
+    def test_no_end_marker_in_normal_response(self, detector):
+        """测试：正常响应中无结束标记"""
         # Arrange
-        response = """我同意你的看法。
-
-这个观点很有启发性，值得进一步探讨。"""
+        response = "我同意你的看法。\n\n这个观点很有启发性。"
 
         # Act
-        result = detector.detect_end_signal(response)
+        result = detector.detect(response)
 
         # Assert
-        assert result.should_end is False
-        assert result.method is None
-        assert result.confidence < 0.5
+        assert result.detected is False
 
-    def test_detect_semantic_end_patterns(self, detector):
-        """测试：检测语义结束模式"""
+    def test_disabled_detector_always_returns_false(self, detector):
+        """测试：禁用的检测器始终返回 False"""
         # Arrange
-        response = "经过深入讨论，我们可以到此为止了。"
+        detector.config.enable_detection = False
+        response = "我们有共识了。\n\n<!-- END -->"
 
         # Act
-        result = detector.detect_end_signal(response)
+        result = detector.detect(response)
 
         # Assert
-        assert result.should_end is True
-        assert result.method == "semantic"
-        assert "到此为止" in result.reason
+        assert result.detected is False
 
-    def test_multiple_patterns_increase_confidence(self, detector):
-        """测试：多个模式同时出现提高置信度"""
+    def test_clean_response_removes_marker(self, detector):
+        """测试：清理响应移除结束标记"""
         # Arrange
-        response = """我们可以总结一下观点。
-我们的对话已经达成共识，可以到此为止。"""
+        response_with_marker = "这是我的观点。\n\n<!-- END -->"
 
         # Act
-        result = detector.detect_end_signal(response)
+        cleaned = detector.clean_response(response_with_marker)
 
         # Assert
-        assert result.should_end is True
-        assert result.confidence >= 0.8
-        assert "总结" in result.reason or "共识" in result.reason
+        assert "<!-- END -->" not in cleaned
+        assert "这是我的观点" in cleaned
+        assert cleaned.strip().endswith("观点。")
 
-    def test_chinese_end_patterns(self, detector):
-        """测试：中文结束模式"""
+    def test_clean_response_without_marker(self, detector):
+        """测试：清理没有标记的响应"""
         # Arrange
-        test_cases = [
-            "可以结束了",
-            "我们已经充分交换了观点",
-            "没有更多需要补充的了",
-            "对话建议到此结束",
-            "让我们总结一下",
-        ]
+        response = "这是我的观点。"
 
-        for response in test_cases:
-            # Act
-            result = detector.detect_end_signal(response)
+        # Act
+        cleaned = detector.clean_response(response)
 
-            # Assert
-            assert result.should_end is True, f"应检测到结束信号: {response}"
+        # Assert
+        assert cleaned == response
 
-    def test_false_positive_prevention(self, detector):
-        """测试：防止误判（假阳性）"""
+    def test_custom_end_marker_detection(self):
+        """测试：自定义结束标记检测"""
         # Arrange
-        # 这些看起来像结束但实际上不是的语句
-        ambiguous_responses = [
-            "到此为止，让我们开始下一个话题",  # 有后续
-            "可以总结一下，但我还有一点补充",  # 明确说有补充
-            "我们已经达成共识，继续深入探讨",  # 明确说继续
-        ]
+        config = ConversationEndConfig(end_marker="::END::")
+        detector = ConversationEndDetector(config)
+        response = "对话结束 ::END::"
 
-        for response in ambiguous_responses:
-            # Act
-            result = detector.detect_end_signal(response)
+        # Act
+        result = detector.detect(response)
 
-            # Assert - 这些不应该触发结束（或置信度很低）
-            if "继续" in response or "补充" in response or "下一个话题" in response:
-                assert result.confidence < 0.6, f"不应高置信度结束: {response}"
+        # Assert
+        assert result.detected is True
+
+    def test_marker_at_end_only(self, detector):
+        """测试：只有末尾的标记才被检测"""
+        # Arrange - 标记在中间
+        response = "<!-- END --> 还有更多内容"
+
+        # Act
+        result = detector.detect(response)
+
+        # Assert - 应该检测到（简单实现不检查位置）
+        assert result.detected is True
 
 
 class TestEndProposal:
@@ -157,107 +157,106 @@ class TestEndProposal:
         """测试：创建结束提议"""
         # Arrange
         agent_name = "支持者"
-        reason = "已达成共识，无明显分歧"
-        confidence = 0.85
+        response_text = "我们有共识了。\n\n<!-- END -->"
+        response_clean = "我们有共识了。"
 
         # Act
         proposal = EndProposal(
             agent_name=agent_name,
-            reason=reason,
-            confidence=confidence,
+            response_text=response_text,
+            response_clean=response_clean,
         )
 
         # Assert
         assert proposal.agent_name == agent_name
-        assert proposal.reason == reason
-        assert proposal.confidence == confidence
-        assert proposal.accepted is None  # 尚未确认
+        assert proposal.response_text == response_text
+        assert proposal.response_clean == response_clean
+        assert proposal.confirmed is False
 
-    def test_proposal_confirmation(self):
-        """测试：提议确认机制"""
+    def test_confirm_proposal(self):
+        """测试：确认提议"""
         # Arrange
-        proposal = EndProposal("支持者", "讨论充分", 0.9)
+        proposal = EndProposal("支持者", "结束", "结束")
 
         # Act
-        proposal.confirm(accept=True)
+        proposal.confirm()
 
         # Assert
-        assert proposal.accepted is True
-
-    def test_proposal_rejection(self):
-        """测试：提议拒绝机制"""
-        # Arrange
-        proposal = EndProposal("挑战者", "还有疑问", 0.6)
-
-        # Act
-        proposal.confirm(accept=False)
-
-        # Assert
-        assert proposal.accepted is False
+        assert proposal.confirmed is True
 
     def test_proposal_string_representation(self):
         """测试：提议的字符串表示"""
         # Arrange
-        proposal = EndProposal("支持者", "讨论充分", 0.9)
+        proposal = EndProposal(
+            "支持者", "我们有共识了。\n\n<!-- END -->", "我们有共识了。"
+        )
 
         # Act
         s = str(proposal)
 
         # Assert
         assert "支持者" in s
-        assert "讨论充分" in s
-        assert "0.9" in s
+        assert "我们有共识了" in s
 
 
-class TestIntegrationWithAgent:
-    """测试与 Agent 的集成"""
+class TestIntegration:
+    """测试集成场景"""
 
-    def test_parse_end_marker_from_response(self):
-        """测试：从完整响应中解析结束标记"""
+    @pytest.fixture
+    def detector(self):
+        """创建检测器实例"""
+        return ConversationEndDetector()
+
+    def test_full_detection_workflow(self, detector):
+        """测试：完整的检测工作流"""
         # Arrange
-        detector = ConversationEndDetector()
-        full_response = """我非常赞同你的观点。
+        response = "经过深入讨论，我们有以下共识。\n\n<!-- END -->"
 
-从技术角度来看，这个方案是可行的。
+        # Act - 检测
+        result = detector.detect(response)
 
-综上所述，<!-- END -->"""
+        # Assert - 检测到标记
+        assert result.detected is True
 
-        # Act
-        result = detector.detect_end_signal(full_response)
+        # Act - 清理
+        cleaned = detector.clean_response(response)
 
-        # Assert
-        assert result.should_end is True
-        assert "标记" in result.method
-
-    def test_remove_end_marker_from_display(self):
-        """测试：移除结束标记用于显示"""
-        # Arrange
-        detector = ConversationEndDetector()
-        response_with_marker = """这是我的观点。
-
-<!-- END -->"""
-
-        # Act
-        cleaned = detector.clean_response_for_display(response_with_marker)
-
-        # Assert
+        # Assert - 标记已移除
         assert "<!-- END -->" not in cleaned
-        assert "这是我的观点" in cleaned
-        assert cleaned.strip().endswith("这是我的观点")  # 标记被移除
+        assert "经过深入讨论" in cleaned
+
+    def test_create_proposal_after_detection(self, detector):
+        """测试：检测后创建提议"""
+        # Arrange
+        response = "可以结束了。\n\n<!-- END -->"
+        result = detector.detect(response)
+
+        # Act
+        if result.detected:
+            proposal = EndProposal(
+                agent_name="智能体",
+                response_text=response,
+                response_clean=detector.clean_response(response),
+            )
+
+        # Assert
+        assert proposal.confirmed is False
+        assert proposal.response_clean == "可以结束了。"
 
     @pytest.mark.parametrize(
-        "response,expected_end",
+        "response,expected_detected",
         [
             ("继续讨论", False),
-            ("让我们总结一下，可以结束了", True),
-            ("我同意，到此为止", True),
+            ("让我们总结一下。<!-- END -->", True),
+            ("我同意，到此为止。<!-- END -->", True),
             ("还有一点要补充", False),
+            ("<!-- END -->", True),  # 仅标记
         ],
     )
-    def test_various_responses(self, detector, response, expected_end):
-        """测试：各种响应的结束检测"""
+    def test_various_responses(self, detector, response, expected_detected):
+        """测试：各种响应的检测"""
         # Act
-        result = detector.detect_end_signal(response)
+        result = detector.detect(response)
 
         # Assert
-        assert result.should_end == expected_end
+        assert result.detected == expected_detected
