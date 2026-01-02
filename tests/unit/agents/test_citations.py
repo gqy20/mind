@@ -55,5 +55,11 @@ def test_display_citations_deduplicates():
         display_citations(citations)
 
         # 应该只显示一次（去重后）
-        # 标题 + 分隔线 = 2 次 print 调用
-        assert mock_console.print.call_count <= 5
+        # 空行 + 分隔线 + 标题 + 1个引用 + 空行 ≈ 5-6 次
+        # 关键是只调用一次引用的打印
+        title_calls = [
+            call
+            for call in mock_console.print.call_args_list
+            if "测试文档" in str(call)
+        ]
+        assert len(title_calls) == 1
