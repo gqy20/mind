@@ -22,6 +22,11 @@ from anthropic.types import MessageParam
 from rich.console import Console
 
 from mind.agent import Agent
+from mind.conversation_ending import (
+    ConversationEndConfig,
+    ConversationEndDetector,
+    EndProposal,
+)
 from mind.logger import get_logger
 from mind.memory import MemoryManager
 
@@ -81,6 +86,12 @@ class ConversationManager:
     search_interval: int = 5
     # 搜索历史管理器（每个对话会话独立）
     search_history: "SearchHistory | None" = field(default=None)
+    # 对话结束检测器
+    end_detector: ConversationEndDetector = field(
+        default_factory=lambda: ConversationEndDetector(
+            ConversationEndConfig(require_confirmation=True)
+        )
+    )
 
     def __post_init__(self):
         """初始化后处理：配置工具智能体"""
@@ -334,6 +345,16 @@ class ConversationManager:
 
                 output.append(response)
                 output.append("")
+
+                # 检测对话结束标记（非交互式模式自动接受）
+                end_result = self.end_detector.detect(response)
+                if end_result.detected:
+                    logger.info(f"{current_agent.name} 请求结束对话（非交互式）")
+                    output.append("")
+                    output.append("---")
+                    output.append("")
+                    output.append("⚠️ AI 请求结束对话")
+                    break
 
                 formatted_content = f"[{current_agent.name}]: {response}"
                 msg = cast(
@@ -743,6 +764,14 @@ class ConversationManager:
             self._show_token_progress()
             print()  # 进度条后的空行
 
+            # 检测对话结束标记（response 保证不为 None）
+            if response is not None:
+                end_result = self.end_detector.detect(response)
+                if end_result.detected:
+                    logger.info(f"{current_agent.name} 请求结束对话")
+                    await self._handle_end_proposal(current_agent.name, response)
+                    return  # 结束本轮，不切换到下一个智能体
+
             # 检查记忆状态并在必要时清理
             status = self.memory.get_status()
             if status == "red":
@@ -822,3 +851,61 @@ class ConversationManager:
             self.memory.add_message(msg["role"], cast(str, msg["content"]))
             logger.info(f"用户输入消息: {user_input[:50]}...")
             print("✅ 已发送，继续对话...\n")
+
+    async def _handle_end_proposal(self, agent_name: str, response: str) -> None:
+        """处理 AI 的对话结束提议
+
+        Args:
+            agent_name: 请求结束的智能体名称
+            response: 完整响应（包含结束标记）
+        """
+        # 清理响应用于显示
+        clean_response = self.end_detector.clean_response(response)
+
+        # 创建结束提议
+        proposal = EndProposal(
+            agent_name=agent_name,
+            response_text=response,
+            response_clean=clean_response,
+        )
+
+        # 显示结束提示
+        print(f"\n{'=' * 60}")
+        print(f"💡 {agent_name} 建议结束对话")
+        print(f"{'=' * 60}")
+        print(f"\n最后发言:\n{clean_response}\n")
+        print(f"{'=' * 60}")
+        print("\n按 Enter 确认结束，或输入其他内容继续对话...")
+        print("> ", end="", flush=True)
+
+        # 获取用户输入
+        try:
+            user_input = await asyncio.get_event_loop().run_in_executor(None, input)
+        except EOFError:
+            user_input = ""
+
+        print()  # 换行
+
+        if not user_input.strip():
+            # 用户确认结束
+            proposal.confirm()
+            logger.info("用户确认结束对话")
+
+            print(f"\n{'=' * 60}")
+            print("✅ 对话已结束")
+            print(f"{'=' * 60}\n")
+
+            # 保存对话并退出
+            self.is_running = False
+        else:
+            # 用户想继续
+            logger.info("用户选择继续对话")
+
+            # 将用户输入添加到对话历史
+            msg = cast(MessageParam, {"role": "user", "content": user_input})
+            self.messages.append(msg)
+            self.memory.add_message(msg["role"], cast(str, msg["content"]))
+
+            print(f"\n{'=' * 60}")
+            print("✅ 继续对话...")
+            print(f"{'=' * 60}\n")
