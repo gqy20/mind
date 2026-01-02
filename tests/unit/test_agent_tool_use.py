@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from anthropic.types import MessageParam
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class MockAsyncStream:

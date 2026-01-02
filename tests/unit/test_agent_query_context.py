@@ -10,7 +10,7 @@ Agent query_tool 重构的单元测试
 import pytest
 from anthropic.types import MessageParam
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class TestQueryToolWithContext:

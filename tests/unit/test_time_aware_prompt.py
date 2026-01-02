@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pytest
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class TestTimeAwarePrompt:

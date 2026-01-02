@@ -7,7 +7,7 @@ Agent 提示词增强功能的单元测试
 - 避免重复添加说明
 """
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class TestPromptEnhancement:

@@ -9,7 +9,7 @@ ConversationManager 工具集成的单元测试
 import pytest
 from anthropic.types import MessageParam
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 from mind.conversation import ConversationManager
 
 

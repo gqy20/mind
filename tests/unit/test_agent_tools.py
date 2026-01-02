@@ -9,7 +9,7 @@ Agent 工具功能的单元测试
 import pytest
 from anthropic.types import MessageParam
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class TestAgentQueryTool:

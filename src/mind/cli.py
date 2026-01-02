@@ -15,7 +15,7 @@ import argparse
 import asyncio
 import os
 
-from mind.agent import DEFAULT_MODEL, Agent
+from mind.agents.agent import DEFAULT_MODEL, Agent
 from mind.conversation import ConversationManager
 from mind.logger import get_logger
 from mind.prompts import get_default_config_path, load_all_configs

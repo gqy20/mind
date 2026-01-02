@@ -14,7 +14,7 @@ import sys
 # 添加项目路径
 sys.path.insert(0, "src")
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 from mind.cli import parse_args
 from mind.conversation import ConversationManager
 

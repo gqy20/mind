@@ -15,7 +15,7 @@ import pytest
 from anthropic import APIStatusError
 from httpx import Request, Response
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class TestAgentErrorHandling:

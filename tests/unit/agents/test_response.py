@@ -9,9 +9,8 @@ import pytest
 @pytest.mark.asyncio
 async def test_response_handler_returns_text():
     """测试响应处理器返回文本"""
-    from mind.agents.response import ResponseHandler
-
     from mind.agents.client import AnthropicClient
+    from mind.agents.response import ResponseHandler
 
     # Mock 事件流
     mock_event = MagicMock()
@@ -51,9 +50,8 @@ async def test_response_handler_returns_text():
 @pytest.mark.asyncio
 async def test_response_handler_interrupt_returns_none():
     """测试中断时返回 None"""
-    from mind.agents.response import ResponseHandler
-
     from mind.agents.client import AnthropicClient
+    from mind.agents.response import ResponseHandler
 
     interrupt = asyncio.Event()
     interrupt.set()

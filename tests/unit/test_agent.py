@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 
 
 class TestAgentInit:

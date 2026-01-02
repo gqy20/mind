@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, cast
 from anthropic.types import MessageParam
 from rich.console import Console
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 from mind.conversation_ending import (
     ConversationEndConfig,
     ConversationEndDetector,

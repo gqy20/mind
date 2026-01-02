@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from mind.agent import Agent
+from mind.agents.agent import Agent
 from mind.conversation import ConversationManager
 
 
