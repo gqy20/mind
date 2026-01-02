@@ -33,6 +33,10 @@ class ConversationEndConfig:
     # 检测后是否自动结束（False 时仅提示用户）
     auto_end: bool = False
 
+    # 检测结束前所需的最小轮数
+    # 防止对话过早结束，确保双方充分交流
+    min_turns_before_end: int = 20
+
 
 @dataclass
 class EndDetectionResult:
@@ -85,11 +89,12 @@ class ConversationEndDetector:
         """
         self.config = config or ConversationEndConfig()
 
-    def detect(self, response: str) -> EndDetectionResult:
+    def detect(self, response: str, current_turn: int = 0) -> EndDetectionResult:
         """检测响应中是否包含结束标记
 
         Args:
             response: AI 的完整响应文本
+            current_turn: 当前对话轮次（从 1 开始），0 表示未指定
 
         Returns:
             结束检测结果
@@ -97,9 +102,20 @@ class ConversationEndDetector:
         if not self.config.enable_detection:
             return EndDetectionResult(detected=False)
 
+        # 检查是否达到最小轮数要求
+        if current_turn < self.config.min_turns_before_end:
+            logger.debug(
+                f"轮次不足 ({current_turn} < {self.config.min_turns_before_end})，"
+                "忽略结束标记"
+            )
+            return EndDetectionResult(detected=False)
+
         # 检测显式标记（简单、可靠、0 误判）
         if self.config.end_marker in response:
-            logger.info("检测到显式结束标记")
+            logger.info(
+                f"检测到显式结束标记 (第 {current_turn} 轮，"
+                f"满足最小轮数要求 {self.config.min_turns_before_end})"
+            )
             return EndDetectionResult(
                 detected=True,
                 method="marker",

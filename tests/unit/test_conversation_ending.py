@@ -30,6 +30,15 @@ class TestConversationEndConfig:
         assert config.end_marker == "<!-- END -->"
         assert config.require_confirmation is True
         assert config.auto_end is False
+        assert config.min_turns_before_end == 20  # 默认至少 20 轮
+
+    def test_custom_min_turns(self):
+        """测试：自定义最小轮数"""
+        # Arrange & Act
+        config = ConversationEndConfig(min_turns_before_end=10)
+
+        # Assert
+        assert config.min_turns_before_end == 10
 
     def test_custom_end_marker(self):
         """测试：自定义结束标记"""
@@ -62,8 +71,10 @@ class TestConversationEndDetector:
 
     @pytest.fixture
     def detector(self):
-        """创建检测器实例"""
-        return ConversationEndDetector()
+        """创建检测器实例（无轮数限制）"""
+        # 使用 min_turns_before_end=0 以便旧测试不需要关心轮次
+        config = ConversationEndConfig(min_turns_before_end=0)
+        return ConversationEndDetector(config)
 
     def test_detect_explicit_end_marker(self, detector):
         """测试：检测显式结束标记"""
@@ -128,7 +139,7 @@ class TestConversationEndDetector:
     def test_custom_end_marker_detection(self):
         """测试：自定义结束标记检测"""
         # Arrange
-        config = ConversationEndConfig(end_marker="::END::")
+        config = ConversationEndConfig(end_marker="::END::", min_turns_before_end=0)
         detector = ConversationEndDetector(config)
         response = "对话结束 ::END::"
 
@@ -148,6 +159,84 @@ class TestConversationEndDetector:
 
         # Assert - 应该检测到（简单实现不检查位置）
         assert result.detected is True
+
+    def test_end_marker_ignored_when_turn_count_too_low(self):
+        """测试：轮次不足时，结束标记被忽略"""
+        # Arrange
+        config = ConversationEndConfig(min_turns_before_end=20)
+        detector = ConversationEndDetector(config)
+        response = "可以结束了。\n\n<!-- END -->"
+
+        # Act - 第 1 轮
+        result = detector.detect(response, current_turn=1)
+
+        # Assert - 不应该检测到（轮次不足）
+        assert result.detected is False
+
+    def test_end_marker_detected_when_turn_count_sufficient(self):
+        """测试：轮次足够时，结束标记被检测"""
+        # Arrange
+        config = ConversationEndConfig(min_turns_before_end=20)
+        detector = ConversationEndDetector(config)
+        response = "可以结束了。\n\n<!-- END -->"
+
+        # Act - 第 20 轮
+        result = detector.detect(response, current_turn=20)
+
+        # Assert - 应该检测到（轮次足够）
+        assert result.detected is True
+
+    def test_end_marker_detected_after_min_turns(self):
+        """测试：超过最小轮数后，结束标记被检测"""
+        # Arrange
+        config = ConversationEndConfig(min_turns_before_end=20)
+        detector = ConversationEndDetector(config)
+        response = "达成共识。\n\n<!-- END -->"
+
+        # Act - 第 25 轮
+        result = detector.detect(response, current_turn=25)
+
+        # Assert - 应该检测到
+        assert result.detected is True
+
+    def test_turn_count_edge_case_exactly_min_turns(self):
+        """测试：边界情况 - 刚好等于最小轮数"""
+        # Arrange
+        config = ConversationEndConfig(min_turns_before_end=20)
+        detector = ConversationEndDetector(config)
+        response = "对话完成。<!-- END -->"
+
+        # Act - 第 20 轮（刚好等于最小值）
+        result = detector.detect(response, current_turn=20)
+
+        # Assert - 应该检测到
+        assert result.detected is True
+
+    def test_turn_count_edge_case_one_below_min_turns(self):
+        """测试：边界情况 - 少一轮"""
+        # Arrange
+        config = ConversationEndConfig(min_turns_before_end=20)
+        detector = ConversationEndDetector(config)
+        response = "对话完成。<!-- END -->"
+
+        # Act - 第 19 轮（少一轮）
+        result = detector.detect(response, current_turn=19)
+
+        # Assert - 不应该检测到
+        assert result.detected is False
+
+    def test_no_turn_count_param_defaults_to_zero(self):
+        """测试：不传轮次参数时，默认为 0"""
+        # Arrange
+        config = ConversationEndConfig(min_turns_before_end=20)
+        detector = ConversationEndDetector(config)
+        response = "结束吧。<!-- END -->"
+
+        # Act - 不传轮次参数（默认为 0）
+        result = detector.detect(response)
+
+        # Assert - 不应该检测到（0 < 20）
+        assert result.detected is False
 
 
 class TestEndProposal:
@@ -204,8 +293,10 @@ class TestIntegration:
 
     @pytest.fixture
     def detector(self):
-        """创建检测器实例"""
-        return ConversationEndDetector()
+        """创建检测器实例（无轮数限制）"""
+        # 使用 min_turns_before_end=0 以便测试不需要关心轮次
+        config = ConversationEndConfig(min_turns_before_end=0)
+        return ConversationEndDetector(config)
 
     def test_full_detection_workflow(self, detector):
         """测试：完整的检测工作流"""

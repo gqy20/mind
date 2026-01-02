@@ -347,7 +347,9 @@ class ConversationManager:
                 output.append("")
 
                 # 检测对话结束标记（非交互式模式自动接受）
-                end_result = self.end_detector.detect(response)
+                end_result = self.end_detector.detect(
+                    response, current_turn=self.turn + 1
+                )
                 if end_result.detected:
                     logger.info(f"{current_agent.name} 请求结束对话（非交互式）")
                     output.append("")
@@ -766,7 +768,9 @@ class ConversationManager:
 
             # 检测对话结束标记（response 保证不为 None）
             if response is not None:
-                end_result = self.end_detector.detect(response)
+                end_result = self.end_detector.detect(
+                    response, current_turn=self.turn + 1
+                )
                 if end_result.detected:
                     logger.info(f"{current_agent.name} 请求结束对话")
                     await self._handle_end_proposal(current_agent.name, response)
