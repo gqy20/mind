@@ -59,17 +59,15 @@ jobs:
           TOPIC1: ${{ steps.read_topics.outputs.topic1 }}
           TOPIC2: ${{ steps.read_topics.outputs.topic2 }}
         run: |
-          # 创建第一个 issue 并记录编号
-          gh issue create --title "[对话] $TOPIC1" --body "$TOPIC1" --label "chat"
-          sleep 2
-          ISSUE1=$(gh issue list --limit 1 --search "$TOPIC1" --json number --jq '.[0].number')
+          # 创建第一个 issue 并从 URL 提取编号
+          ISSUE_URL=$(gh issue create --title "[对话] $TOPIC1" --body "$TOPIC1" --label "chat")
+          ISSUE1=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
           echo "issue1=$ISSUE1" >> $GITHUB_OUTPUT
-          sleep 2
+          sleep 3
 
-          # 创建第二个 issue 并记录编号
-          gh issue create --title "[对话] $TOPIC2" --body "$TOPIC2" --label "chat"
-          sleep 2
-          ISSUE2=$(gh issue list --limit 1 --search "$TOPIC2" --json number --jq '.[0].number')
+          # 创建第二个 issue 并从 URL 提取编号
+          ISSUE_URL=$(gh issue create --title "[对话] $TOPIC2" --body "$TOPIC2" --label "chat")
+          ISSUE2=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
           echo "issue2=$ISSUE2" >> $GITHUB_OUTPUT
 
       - name: Trigger conversation for issue 1
