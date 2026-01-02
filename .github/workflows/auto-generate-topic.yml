@@ -52,32 +52,13 @@ jobs:
           echo "topic2=$TOPIC2" >> $GITHUB_OUTPUT
 
       - name: Create issues with generated topics
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const topic1 = '${{ steps.read_topics.outputs.topic1 }}';
-            const topic2 = '${{ steps.read_topics.outputs.topic2 }}';
-
-            // 创建第一个 issue
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[对话] ${topic1}`,
-              body: topic1,
-              labels: ['chat']
-            });
-
-            // 等待一小段时间避免 rate limit
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // 创建第二个 issue
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[对话] ${topic2}`,
-              body: topic2,
-              labels: ['chat']
-            });
-
-            console.log(`Created issues: ${topic1}, ${topic2}`);
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOPIC1: ${{ steps.read_topics.outputs.topic1 }}
+          TOPIC2: ${{ steps.read_topics.outputs.topic2 }}
+        run: |
+          # 创建第一个 issue
+          gh issue create --title "[对话] $TOPIC1" --body "$TOPIC1" --label "chat"
+          sleep 2
+          # 创建第二个 issue
+          gh issue create --title "[对话] $TOPIC2" --body "$TOPIC2" --label "chat"
