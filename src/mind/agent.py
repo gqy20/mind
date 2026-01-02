@@ -5,6 +5,7 @@
 import asyncio
 import os
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from anthropic import APIStatusError, AsyncAnthropic
@@ -165,7 +166,39 @@ class Agent:
 - 不要写"让我搜索..."、"我调用工具..."之类的描述
 - 工具结果会自动返回，你可以基于结果继续讨论
 """)
+
+        # 时间感知信息
+        time_aware_info = self._get_time_aware_prompt()
+        tool_parts.append(time_aware_info)
+
         return prompt + "".join(tool_parts)
+
+    def _get_time_aware_prompt(self) -> str:
+        """生成时间感知的提示词
+
+        Returns:
+            包含当前时间和时间感知指令的提示词
+        """
+        now = datetime.now()
+        current_year = now.year
+        current_date = now.strftime("%Y年%m月%d日")
+
+        return f"""
+## 当前时间
+
+**当前时间**: {current_date}
+
+在进行网络搜索时，请特别注意信息的**时效性**：
+
+1. **优先关注最新资料**: 搜索时请优先关注 {current_year} 年和
+   {current_year - 1} 年的资料
+2. **验证发布时间**: 涉及时间敏感的信息（如技术版本、统计数据、
+   最新进展）时，请注意确认发布时间是否过时
+3. **避免过时信息**: 如果搜索结果中的信息发布时间早于
+   {current_year - 2} 年，请谨慎引用，或特别说明其可能已过时
+
+**重要**: 搜索时请优先关注时效性，确保引用的信息是最新和准确的。
+"""
 
     async def respond(
         self, messages: list[MessageParam], interrupt: asyncio.Event
