@@ -98,9 +98,13 @@ jobs:
           import json
           from pathlib import Path
 
-          # 查找最新的对话 JSON 文件
+          # 查找最新的对话 JSON 文件（排除搜索历史文件）
           history_dir = Path("history")
-          json_files = sorted(history_dir.glob("*.json"), reverse=True)
+          json_files = [
+              f for f in history_dir.glob("*.json")
+              if not f.name.startswith("search_history")
+          ]
+          json_files = sorted(json_files, reverse=True)
 
           if not json_files:
               print("❌ 未找到对话日志文件")
