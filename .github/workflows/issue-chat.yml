@@ -54,23 +54,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run conversation and post comment
+      - name: Check if chat issue
+        id: check_chat
         env:
+          ISSUE_TITLE: ${{ steps.get_issue.outputs.title }}
+          ISSUE_NUMBER: ${{ steps.get_issue.outputs.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 检查是否为对话 issue
+          if echo "$ISSUE_TITLE" | grep -q '^\[对话\]'; then
+            echo "is_chat=true" >> $GITHUB_OUTPUT
+          elif gh issue view "$ISSUE_NUMBER" --json labels --jq '.labels[].name' | grep -qE '(chat|对话)'; then
+            echo "is_chat=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_chat=false" >> $GITHUB_OUTPUT
+            echo "This is not a chat issue, skipping..."
+          fi
+
+      - name: Run conversation
+        if: steps.check_chat.outputs.is_chat == 'true'
+        env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ISSUE_TITLE: ${{ steps.get_issue.outputs.title }}
           ISSUE_BODY: ${{ steps.get_issue.outputs.body }}
-          ISSUE_NUMBER: ${{ steps.get_issue.outputs.number }}
         run: |
-          # 检查是否为对话 issue
-          if ! echo "$ISSUE_TITLE" | grep -q '^\[对话\]'; then
-            if ! gh issue view "$ISSUE_NUMBER" --json labels --jq '.labels[].name' | grep -qE '(chat|对话)'; then
-              echo "This is not a chat issue, skipping..."
-              exit 0
-            fi
-          fi
-
           # 构建主题（如果 body 存在则换行拼接）
           if [ -n "$ISSUE_BODY" ]; then
             TOPIC="$ISSUE_TITLE"$'\n\n'"$ISSUE_BODY"
@@ -78,8 +86,68 @@ jobs:
             TOPIC="$ISSUE_TITLE"
           fi
 
-          # 运行对话并输出到文件
-          uv run python -m mind.cli "$TOPIC" --non-interactive --max-turns 50 > /tmp/comment.txt
+          # 运行对话（完整对话已自动保存到 history/*.json）
+          uv run python -m mind.cli "$TOPIC" --non-interactive --max-turns 20
 
-          # 使用 gh 发布评论
-          gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.txt
+      - name: Generate summary comment
+        if: steps.check_chat.outputs.is_chat == 'true'
+        env:
+          ISSUE_NUMBER: ${{ steps.get_issue.outputs.number }}
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          from pathlib import Path
+
+          # 查找最新的对话 JSON 文件
+          history_dir = Path("history")
+          json_files = sorted(history_dir.glob("*.json"), reverse=True)
+
+          if not json_files:
+              print("❌ 未找到对话日志文件")
+              exit(1)
+
+          with open(json_files[0], "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          # 提取关键信息
+          topic = data.get("topic", "")
+          turn_count = data.get("turn_count", 0)
+          summary = data.get("summary", "")
+          messages = data.get("messages", [])
+
+          # 计算 token 估算
+          total_chars = sum(len(m.get("content", "")) for m in messages)
+          total_tokens = total_chars // 4
+
+          # 生成摘要评论
+          output = []
+          output.append(f"🎯 **对话主题**: {topic}")
+          output.append("")
+          output.append(f"📊 **统计**: {turn_count} 轮对话, ~{total_tokens:,} tokens")
+          output.append("")
+
+          if summary:
+              output.append("📝 **对话总结**")
+              output.append(summary)
+              output.append("")
+
+          output.append("💾 **完整对话日志**: 已保存为 GitHub Artifact")
+          output.append(f"📁 文件: `{json_files[0].name}`")
+
+          Path("/tmp/summary.txt").write_text("\n".join(output), encoding="utf-8")
+          PYTHON_SCRIPT
+
+      - name: Upload conversation as artifact
+        if: steps.check_chat.outputs.is_chat == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversation-${{ steps.get_issue.outputs.number }}-${{ github.run_number }}
+          path: history/*.json
+          retention-days: 90
+
+      - name: Post summary comment
+        if: steps.check_chat.outputs.is_chat == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ steps.get_issue.outputs.number }}" --body-file /tmp/summary.txt
