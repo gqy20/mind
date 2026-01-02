@@ -59,14 +59,11 @@ class TestAgentRespond:
             yield mock_event_2
 
         mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream_iter())
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
         mock_stream.__aexit__ = AsyncMock(return_value=None)
+        mock_stream.__aiter__ = lambda self: mock_stream_iter()
 
-        mock_client = MagicMock()
-        mock_client.messages.stream = MagicMock(return_value=mock_stream)
-
-        # Patch 内部的 client.client
-        with patch.object(agent.client, "client", mock_client):
+        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
@@ -117,14 +114,11 @@ class TestAgentRespond:
             yield mock_event_4
 
         mock_stream = AsyncMock()
-        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream_iter())
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
         mock_stream.__aexit__ = AsyncMock(return_value=None)
+        mock_stream.__aiter__ = lambda self: mock_stream_iter()
 
-        mock_client = MagicMock()
-        mock_client.messages.stream = MagicMock(return_value=mock_stream)
-
-        # Patch 内部的 client.client
-        with patch.object(agent.client, "client", mock_client):
+        with patch.object(agent.client.messages, "stream", return_value=mock_stream):
             # Act
             result = await agent.respond(messages, interrupt)
 
