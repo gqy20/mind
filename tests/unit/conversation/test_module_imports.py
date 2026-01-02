@@ -38,15 +38,13 @@ def test_interaction_handler_can_be_imported():
 
 def test_ending_handler_can_be_imported():
     """测试 EndingHandler 可以导入"""
-    with pytest.raises(ImportError):
-        from mind.conversation.ending import EndingHandler
+    from mind.conversation.ending import EndingHandler
 
-        assert EndingHandler is not None
+    assert EndingHandler is not None
 
 
 def test_flow_controller_can_be_imported():
     """测试 FlowController 可以导入"""
-    with pytest.raises(ImportError):
-        from mind.conversation.flow import FlowController
+    from mind.conversation.flow import FlowController
 
-        assert FlowController is not None
+    assert FlowController is not None

@@ -8,6 +8,8 @@ __all__ = [
     "ProgressDisplay",
     "SearchHandler",
     "InteractionHandler",
+    "EndingHandler",
+    "FlowController",
 ]
 
 
@@ -36,5 +38,13 @@ def __getattr__(name: str):
         from mind.conversation import interaction
 
         return interaction.InteractionHandler
+    elif name == "EndingHandler":
+        from mind.conversation import ending
+
+        return ending.EndingHandler
+    elif name == "FlowController":
+        from mind.conversation import flow
+
+        return flow.FlowController
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
