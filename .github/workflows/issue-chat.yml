@@ -47,9 +47,10 @@ jobs:
           echo "number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
 
           # 获取 issue 详情
-          gh issue view "$ISSUE_NUMBER" --json title,body --jq '.title, .body' > /tmp/issue.json
-          echo "title=$(jq -r '.[0]' /tmp/issue.json)" >> $GITHUB_OUTPUT
-          echo "body=$(jq -r '.[1]' /tmp/issue.json)" >> $GITHUB_OUTPUT
+          TITLE=$(gh issue view "$ISSUE_NUMBER" --json title --jq '.title')
+          BODY=$(gh issue view "$ISSUE_NUMBER" --json body --jq '.body')
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
