@@ -31,10 +31,9 @@ def test_search_handler_can_be_imported():
 
 def test_interaction_handler_can_be_imported():
     """测试 InteractionHandler 可以导入"""
-    with pytest.raises(ImportError):
-        from mind.conversation.interaction import InteractionHandler
+    from mind.conversation.interaction import InteractionHandler
 
-        assert InteractionHandler is not None
+    assert InteractionHandler is not None
 
 
 def test_ending_handler_can_be_imported():
