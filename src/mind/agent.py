@@ -190,7 +190,7 @@ class Agent:
             # 第一轮：生成响应（可能包含工具调用）
             async with self.client.messages.stream(
                 model=self.model,
-                max_tokens=1024,
+                max_tokens=2048,
                 system=self.system_prompt,
                 messages=messages,
                 tools=_get_tools_schema(),  # 传入工具定义
@@ -445,7 +445,7 @@ class Agent:
         try:
             async with self.client.messages.stream(
                 model=self.model,
-                max_tokens=1024,
+                max_tokens=2048,
                 system=self.system_prompt,
                 messages=messages,
             ) as stream:
