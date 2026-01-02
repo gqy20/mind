@@ -142,6 +142,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Upload conversation as artifact
+        id: upload_artifact
         if: steps.check_chat.outputs.is_chat == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -153,5 +154,9 @@ jobs:
         if: steps.check_chat.outputs.is_chat == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_URL: ${{ steps.upload_artifact.outputs.artifact-url }}
         run: |
+          # 在摘要末尾添加 artifact 下载链接
+          echo "" >> /tmp/summary.txt
+          echo "🔗 [下载完整对话]($ARTIFACT_URL)" >> /tmp/summary.txt
           gh issue comment "${{ steps.get_issue.outputs.number }}" --body-file /tmp/summary.txt
