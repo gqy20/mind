@@ -16,7 +16,7 @@ sys.path.insert(0, "src")
 
 from mind.agents.agent import Agent
 from mind.cli import parse_args
-from mind.conversation import ConversationManager
+from mind.manager import ConversationManager
 
 
 def test_cli_args():

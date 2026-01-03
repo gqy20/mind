@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from mind.agents.prompts import (
+from mind.agents.prompt_builder import (
     PromptBuilder,
     get_time_aware_prompt,
 )

@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from mind.agents.citations import display_citations
+from mind.display.citations import display_citations
 
 
 def test_display_citations_with_mock_console():
@@ -20,8 +20,8 @@ def test_display_citations_with_mock_console():
         },
     ]
 
-    # Mock console
-    with patch("mind.agents.citations.console") as mock_console:
+    # Mock console（使用新的导入路径）
+    with patch("mind.display.citations.console") as mock_console:
         display_citations(citations)
 
         # 验证 console.print 被调用
@@ -30,8 +30,8 @@ def test_display_citations_with_mock_console():
 
 def test_display_citations_empty_list():
     """测试空引用列表不显示"""
-    # Mock console
-    with patch("mind.agents.citations.console") as mock_console:
+    # Mock console（使用新的导入路径）
+    with patch("mind.display.citations.console") as mock_console:
         display_citations([])
 
         # 应该不调用 print
@@ -51,7 +51,7 @@ def test_display_citations_deduplicates():
         },
     ]
 
-    with patch("mind.agents.citations.console") as mock_console:
+    with patch("mind.display.citations.console") as mock_console:
         display_citations(citations)
 
         # 应该只显示一次（去重后）

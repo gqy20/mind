@@ -9,7 +9,7 @@
 - 边界保护（最少保留轮数）
 """
 
-from mind.memory import MemoryManager, TokenConfig
+from mind.conversation.memory import MemoryManager, TokenConfig
 
 
 class TestTokenConfig:

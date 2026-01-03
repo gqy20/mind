@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from mind.logger import get_logger
 
-logger = get_logger("mind.conversation_ending")
+logger = get_logger("mind.conversation.ending_detector")
 
 # 默认结束标记
 DEFAULT_END_MARKER = "<!-- END -->"

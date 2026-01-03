@@ -151,7 +151,7 @@ class TestInteractionHandler:
         # 验证轮次被重置
         assert manager.turn == 0
         # 验证记忆被重新创建（memory 是 MemoryManager 实例）
-        from mind.memory import MemoryManager
+        from mind.conversation.memory import MemoryManager
 
         assert isinstance(manager.memory, MemoryManager)
 

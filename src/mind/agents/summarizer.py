@@ -14,13 +14,13 @@ from anthropic.types import MessageParam
 from mind.logger import get_logger
 
 if TYPE_CHECKING:
-    from mind.prompts import SettingsConfig
+    from mind.config import SettingsConfig
 
 
 # 默认模型配置
 DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 
-logger = get_logger("mind.summarizer")
+logger = get_logger("mind.agents.summarizer")
 
 
 class SummarizerAgent:

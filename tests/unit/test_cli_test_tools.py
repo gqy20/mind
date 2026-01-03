@@ -73,7 +73,7 @@ class TestTestToolsCommand:
             mock_agent = AsyncMock()
             mock_agent.read_file_analysis.return_value = {
                 "success": True,
-                "file": "src/mind/agent.py",
+                "file": "src/mind/agents/agent.py",
                 "content": "这个文件定义 Agent 类",
                 "error": None,
             }
@@ -84,7 +84,7 @@ class TestTestToolsCommand:
 
             agent = ToolAgent()
             result = await agent.read_file_analysis(
-                "src/mind/agent.py", "这个文件做什么？"
+                "src/mind/agents/agent.py", "这个文件做什么？"
             )
 
         # Assert

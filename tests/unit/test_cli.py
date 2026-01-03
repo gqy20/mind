@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from mind.cli import check_config, main
-from mind.prompts import get_default_config_path, load_agent_configs
+from mind.config import get_default_config_path, load_agent_configs
 
 
 class TestCheckConfig:

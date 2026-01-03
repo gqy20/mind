@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     pass
 
 # 日志器
-logger = get_logger("mind.agents.analysis")
+logger = get_logger("mind.agents.conversation_analyzer")
 
 
 def analyze_conversation(

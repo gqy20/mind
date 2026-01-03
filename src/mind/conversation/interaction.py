@@ -10,8 +10,8 @@ import sys
 from anthropic.types import MessageParam
 from rich.console import Console
 
+from mind.conversation.memory import MemoryManager
 from mind.logger import get_logger
-from mind.memory import MemoryManager
 
 logger = get_logger("mind.conversation.interaction")
 

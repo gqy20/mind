@@ -16,9 +16,9 @@ import asyncio
 import os
 
 from mind.agents.agent import DEFAULT_MODEL, Agent
+from mind.config import get_default_config_path, load_all_configs
 from mind.logger import get_logger
 from mind.manager import ConversationManager
-from mind.prompts import get_default_config_path, load_all_configs
 
 logger = get_logger("mind.cli")
 
@@ -135,7 +135,7 @@ async def main():
         # 测试 2: 文件读取
         print("\n[测试 2] 文件读取...")
         file_result = await agent.read_file_analysis(
-            "src/mind/agent.py", "这个文件的主要功能是什么？"
+            "src/mind/agents/agent.py", "这个文件的主要功能是什么？"
         )
 
         if file_result["success"]:

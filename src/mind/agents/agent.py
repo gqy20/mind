@@ -7,13 +7,13 @@ import asyncio
 import os
 from typing import TYPE_CHECKING, Any
 
-from mind.agents.analysis import ConversationAnalyzer
 from mind.agents.client import AnthropicClient
+from mind.agents.conversation_analyzer import ConversationAnalyzer
 from mind.agents.documents import DocumentPool
-from mind.agents.prompts import PromptBuilder
+from mind.agents.prompt_builder import PromptBuilder
 from mind.agents.response import ResponseHandler
+from mind.config import SearchConfig, SettingsConfig
 from mind.logger import get_logger
-from mind.prompts import SearchConfig, SettingsConfig
 
 # 默认模型配置
 DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")

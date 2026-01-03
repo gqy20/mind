@@ -156,7 +156,7 @@ def test_dataclass_integration():
 
     from dataclasses import fields
 
-    from mind.conversation import ConversationManager
+    from mind.manager import ConversationManager
 
     field_names = {f.name for f in fields(ConversationManager)}
 

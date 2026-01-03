@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from mind.agents.analysis import (
+from mind.agents.conversation_analyzer import (
     ConversationAnalyzer,
     analyze_conversation,
 )
@@ -87,7 +87,7 @@ def test_analyze_conversation_with_mock_logger():
         {"role": "assistant", "content": "响应"},
     ]
 
-    with patch("mind.agents.analysis.logger") as mock_logger:
+    with patch("mind.agents.conversation_analyzer.logger") as mock_logger:
         result = analyze_conversation(messages)
 
         assert result is not None

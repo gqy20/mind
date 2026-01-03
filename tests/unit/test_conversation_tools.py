@@ -10,7 +10,7 @@ import pytest
 from anthropic.types import MessageParam
 
 from mind.agents.agent import Agent
-from mind.conversation import ConversationManager
+from mind.manager import ConversationManager
 
 
 class TestConversationManagerToolIntegration:

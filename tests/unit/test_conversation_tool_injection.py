@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from mind.agents.agent import Agent
-from mind.conversation import ConversationManager
+from mind.manager import ConversationManager
 
 
 class TestToolInjectionConfig:

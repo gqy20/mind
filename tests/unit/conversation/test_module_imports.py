@@ -6,14 +6,14 @@
 
 def test_conversation_manager_can_be_imported():
     """测试 ConversationManager 可以从新位置导入"""
-    from mind.conversation import ConversationManager
+    from mind.manager import ConversationManager
 
     assert ConversationManager is not None
 
 
 def test_progress_display_can_be_imported():
     """测试 ProgressDisplay 可以导入"""
-    from mind.conversation.progress import ProgressDisplay
+    from mind.display.progress import ProgressDisplay
 
     assert ProgressDisplay is not None
 

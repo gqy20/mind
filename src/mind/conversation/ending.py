@@ -8,7 +8,7 @@ import asyncio
 from anthropic.types import MessageParam
 from rich.console import Console
 
-from mind.conversation_ending import EndProposal
+from mind.conversation.ending_detector import EndProposal
 from mind.logger import get_logger
 
 logger = get_logger("mind.conversation.ending")

@@ -103,12 +103,12 @@ class TestToolAgentReadFileAnalysis:
         with patch.object(agent, "_execute", return_value=mock_response):
             # Act
             result = await agent.read_file_analysis(
-                "src/mind/agent.py", "这个文件做什么？"
+                "src/mind/agents/agent.py", "这个文件做什么？"
             )
 
         # Assert
         assert result["success"] is True
-        assert result["file"] == "src/mind/agent.py"
+        assert result["file"] == "src/mind/agents/agent.py"
         assert result["content"] == mock_response
         assert result["error"] is None
 

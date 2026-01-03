@@ -22,17 +22,17 @@ from anthropic.types import MessageParam
 from rich.console import Console
 
 from mind.agents.agent import Agent
-from mind.conversation_ending import (
+from mind.conversation.ending_detector import (
     ConversationEndConfig,
     ConversationEndDetector,
 )
+from mind.conversation.memory import MemoryManager
 from mind.logger import get_logger
-from mind.memory import MemoryManager
 
 if TYPE_CHECKING:
+    from mind.agents.summarizer import SummarizerAgent
     from mind.conversation.flow import FlowController
-    from mind.search_history import SearchHistory
-    from mind.summarizer import SummarizerAgent
+    from mind.tools.search_history import SearchHistory
 
 logger = get_logger("mind.conversation")
 
@@ -102,7 +102,7 @@ class ConversationManager:
         """初始化后处理：配置工具智能体"""
         # 初始化搜索历史（每个会话独立）
         if self.enable_search:
-            from mind.search_history import SearchHistory
+            from mind.tools.search_history import SearchHistory
 
             # 使用时间戳创建会话专属的搜索历史文件
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -127,7 +127,7 @@ class ConversationManager:
             logger.info("工具扩展已启用，两个智能体共享 ToolAgent")
 
         # 初始化总结智能体
-        from mind.summarizer import SummarizerAgent
+        from mind.agents.summarizer import SummarizerAgent
 
         self.summarizer_agent = SummarizerAgent()
         logger.info("总结智能体已初始化")

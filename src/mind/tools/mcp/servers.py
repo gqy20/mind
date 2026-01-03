@@ -62,7 +62,7 @@ def create_knowledge_mcp_server() -> dict[str, Any]:
                 return "没有找到搜索历史"
 
             # 使用最新的文件
-            from mind.search_history import SearchHistory
+            from mind.tools.search_history import SearchHistory
 
             search_history = SearchHistory(file_path=history_files[0])
 

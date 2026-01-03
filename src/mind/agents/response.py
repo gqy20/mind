@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING
 from anthropic import APIStatusError
 from anthropic.types import ToolParam
 
-from mind.agents.citations import display_citations, format_citations
 from mind.agents.client import AnthropicClient
-from mind.agents.utils import console, logger
-from mind.prompts import SearchConfig
+from mind.agents.utils import _clean_agent_name_prefix, console, logger
+from mind.config import SearchConfig
+from mind.display.citations import display_citations, format_citations
 
 
 @dataclass
@@ -61,6 +61,142 @@ class ResponseHandler:
         self.name = name
         self.documents = documents
 
+    def _handle_content_block_delta(
+        self, event, response_text: str, has_text_delta: bool
+    ) -> tuple[str, bool, list[dict]]:
+        """处理 content_block_delta 事件
+
+        Args:
+            event: 流事件
+            response_text: 当前累积的响应文本
+            has_text_delta: 是否已处理过 text_delta
+
+        Returns:
+            (更新后的响应文本, 更新后的 has_text_delta, 新增的引用列表)
+        """
+        citations_buffer: list[dict] = []
+
+        if event.type != "content_block_delta":
+            return response_text, has_text_delta, citations_buffer
+
+        if not (hasattr(event, "delta") and hasattr(event.delta, "type")):
+            return response_text, has_text_delta, citations_buffer
+
+        delta_type = event.delta.type
+
+        if delta_type == "text_delta":
+            text = getattr(event.delta, "text", "")
+            text = _clean_agent_name_prefix(text)
+            response_text += text
+            print(text, end="", flush=True)
+            return response_text, True, citations_buffer
+
+        elif delta_type == "citations_delta":
+            if hasattr(event.delta, "citations"):
+                for citation in event.delta.citations:
+                    citations_buffer.append(
+                        {
+                            "type": getattr(citation, "type", "unknown"),
+                            "document_title": getattr(
+                                citation, "document_title", "未知来源"
+                            ),
+                            "cited_text": getattr(citation, "cited_text", ""),
+                        }
+                    )
+            return response_text, has_text_delta, citations_buffer
+
+        return response_text, has_text_delta, citations_buffer
+
+    def _handle_text_event(
+        self, event, response_text: str, has_text_delta: bool
+    ) -> tuple[str, bool]:
+        """处理旧格式 text 事件
+
+        Args:
+            event: 流事件
+            response_text: 当前累积的响应文本
+            has_text_delta: 是否已处理过 text_delta
+
+        Returns:
+            (更新后的响应文本, 更新后的 has_text_delta)
+        """
+        if event.type != "text" or has_text_delta:
+            return response_text, has_text_delta
+
+        text = getattr(event, "text", "")
+        text = _clean_agent_name_prefix(text)
+        response_text += text
+        print(text, end="", flush=True)
+        # 注意：旧格式 text 事件不改变 has_text_delta 标志
+        # 这允许多个 text 事件被处理（与原始行为一致）
+        return response_text, has_text_delta
+
+    def _extract_tool_calls(self, event) -> list[dict]:
+        """从 content_block_stop 事件中提取工具调用
+
+        Args:
+            event: 流事件
+
+        Returns:
+            工具调用列表，如果没有则返回空列表
+        """
+        if event.type != "content_block_stop":
+            return []
+
+        if not (
+            hasattr(event, "content_block") and hasattr(event.content_block, "type")
+        ):
+            return []
+
+        if event.content_block.type != "tool_use":
+            return []
+
+        return [
+            {
+                "type": "tool_use",
+                "id": getattr(event.content_block, "id", ""),
+                "name": getattr(event.content_block, "name", ""),
+                "input": getattr(event.content_block, "input", {}),
+            }
+        ]
+
+    def _append_tool_messages(
+        self, messages: list, tool_call: dict, query: str, result_text: str
+    ) -> None:
+        """添加工具调用和结果消息到对话历史
+
+        Args:
+            messages: 消息列表（会被原地修改）
+            tool_call: 工具调用信息字典
+            query: 搜索查询
+            result_text: 搜索结果文本
+        """
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tool_call["id"],
+                        "name": "search_web",
+                        "input": {"query": query},
+                    }
+                ],
+            }
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_call["id"],
+                        "content": result_text,
+                    }
+                ],
+            }
+        )
+
     async def respond(
         self,
         messages: list["MessageParam"],
@@ -105,72 +241,27 @@ class ResponseHandler:
 
                 # 处理 content_block_delta 事件（新格式）
                 if event.type == "content_block_delta":
-                    if hasattr(event, "delta") and hasattr(event.delta, "type"):
-                        delta_type = event.delta.type
-
-                        # 处理文本增量
-                        if delta_type == "text_delta":
-                            has_text_delta = True  # 标记已处理增量
-                            text = getattr(event.delta, "text", "")
-                            # 清理角色名前缀
-                            from mind.agents.utils import _clean_agent_name_prefix
-
-                            text = _clean_agent_name_prefix(text)
-
-                            response_text += text
-                            print(text, end="", flush=True)
-
-                        # 处理引用增量
-                        elif delta_type == "citations_delta":
-                            # 捕获引用信息
-                            if hasattr(event.delta, "citations"):
-                                for citation in event.delta.citations:
-                                    citations_buffer.append(
-                                        {
-                                            "type": getattr(
-                                                citation, "type", "unknown"
-                                            ),
-                                            "document_title": getattr(
-                                                citation,
-                                                "document_title",
-                                                "未知来源",
-                                            ),
-                                            "cited_text": getattr(
-                                                citation, "cited_text", ""
-                                            ),
-                                        }
-                                    )
+                    response_text, has_text_delta, new_citations = (
+                        self._handle_content_block_delta(
+                            event, response_text, has_text_delta
+                        )
+                    )
+                    citations_buffer.extend(new_citations)
 
                 # 处理 text 事件（旧格式）
-                # 只在没有处理过 text_delta 时才处理，避免重复
-                elif event.type == "text" and not has_text_delta:
-                    from mind.agents.utils import _clean_agent_name_prefix
+                elif event.type == "text":
+                    response_text, has_text_delta = self._handle_text_event(
+                        event, response_text, has_text_delta
+                    )
 
-                    text = getattr(event, "text", "")
-                    text = _clean_agent_name_prefix(text)
-
-                    response_text += text
-                    print(text, end="", flush=True)
-
+                # 处理工具调用
                 elif event.type == "content_block_stop":
-                    # 在 content_block_stop 时，工具调用的 input 已完全构建
-                    if hasattr(event, "content_block") and hasattr(
-                        event.content_block, "type"
-                    ):
-                        if event.content_block.type == "tool_use":
-                            logger.debug(
-                                f"检测到工具调用完成: {event.content_block.name}"
-                            )
-                            if tool_use_buffer is None:
-                                tool_use_buffer = []
-                            tool_use_buffer.append(
-                                {
-                                    "type": "tool_use",
-                                    "id": getattr(event.content_block, "id", ""),
-                                    "name": getattr(event.content_block, "name", ""),
-                                    "input": getattr(event.content_block, "input", {}),
-                                }
-                            )
+                    tool_calls = self._extract_tool_calls(event)
+                    if tool_calls:
+                        logger.debug(f"检测到工具调用完成: {tool_calls[0]['name']}")
+                        if tool_use_buffer is None:
+                            tool_use_buffer = []
+                        tool_use_buffer.extend(tool_calls)
 
             # 处理工具调用
             buffer_status = (
@@ -257,51 +348,18 @@ class ResponseHandler:
 
                 # 处理 content_block_delta 事件（新格式）
                 if event.type == "content_block_delta":
-                    if hasattr(event, "delta") and hasattr(event.delta, "type"):
-                        delta_type = event.delta.type
-
-                        # 处理文本增量
-                        if delta_type == "text_delta":
-                            has_text_delta = True  # 标记已处理增量
-                            from mind.agents.utils import _clean_agent_name_prefix
-
-                            text = getattr(event.delta, "text", "")
-                            text = _clean_agent_name_prefix(text)
-
-                            response_text += text
-                            print(text, end="", flush=True)
-
-                        # 处理引用增量
-                        elif delta_type == "citations_delta":
-                            # 捕获引用信息
-                            if hasattr(event.delta, "citations"):
-                                for citation in event.delta.citations:
-                                    citations_buffer.append(
-                                        {
-                                            "type": getattr(
-                                                citation, "type", "unknown"
-                                            ),
-                                            "document_title": getattr(
-                                                citation,
-                                                "document_title",
-                                                "未知来源",
-                                            ),
-                                            "cited_text": getattr(
-                                                citation, "cited_text", ""
-                                            ),
-                                        }
-                                    )
+                    response_text, has_text_delta, new_citations = (
+                        self._handle_content_block_delta(
+                            event, response_text, has_text_delta
+                        )
+                    )
+                    citations_buffer.extend(new_citations)
 
                 # 处理 text 事件（旧格式）
-                # 只在没有处理过 text_delta 时才处理，避免重复
-                elif event.type == "text" and not has_text_delta:
-                    from mind.agents.utils import _clean_agent_name_prefix
-
-                    text = getattr(event, "text", "")
-                    text = _clean_agent_name_prefix(text)
-
-                    response_text += text
-                    print(text, end="", flush=True)
+                elif event.type == "text":
+                    response_text, has_text_delta = self._handle_text_event(
+                        event, response_text, has_text_delta
+                    )
 
                 elif event.type == "content_block_stop":
                     pass
@@ -372,30 +430,8 @@ class ResponseHandler:
                 search_result_text = (
                     f"已搜索 '{query}'，找到 {len(raw_results)} 条结果。"
                 )
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "type": "tool_use",
-                                "id": tool_call["id"],
-                                "name": "search_web",
-                                "input": {"query": query},
-                            }
-                        ],
-                    }
-                )
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_call["id"],
-                                "content": search_result_text,
-                            }
-                        ],
-                    }
+                self._append_tool_messages(
+                    messages, tool_call, query, search_result_text
                 )
 
                 # 基于工具结果继续生成
@@ -411,31 +447,7 @@ class ResponseHandler:
             )
 
             # 将搜索结果添加到消息历史
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "id": tool_call["id"],
-                            "name": "search_web",
-                            "input": {"query": query},
-                        }
-                    ],
-                }
-            )
-            messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_call["id"],
-                            "content": search_result or "",
-                        }
-                    ],
-                }
-            )
+            self._append_tool_messages(messages, tool_call, query, search_result or "")
 
             # 基于工具结果继续生成
             print(f"\n[{self.name}]: ", end="", flush=True)

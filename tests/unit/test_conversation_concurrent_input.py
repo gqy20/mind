@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from mind.agents.agent import Agent
-from mind.conversation import ConversationManager
+from mind.manager import ConversationManager
 
 
 class TestConcurrentInputMonitoring:

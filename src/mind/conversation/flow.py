@@ -16,8 +16,8 @@ from rich.console import Console
 # 导入其他处理器
 from mind.conversation.ending import EndingHandler
 from mind.conversation.interaction import InteractionHandler
-from mind.conversation.progress import ProgressDisplay
 from mind.conversation.search_handler import SearchHandler
+from mind.display.progress import ProgressDisplay
 from mind.logger import get_logger
 
 logger = get_logger("mind.conversation.flow")
@@ -103,6 +103,135 @@ class FlowController:
             filepath = self.manager.save_conversation()
             console.print(f"📁 对话已保存到: {filepath}")
 
+    def _initialize_output_header(self, topic: str) -> list[str]:
+        """初始化输出头部
+
+        Args:
+            topic: 对话主题
+
+        Returns:
+            头部输出行
+        """
+        return [
+            f"🎯 **对话主题**: {topic}",
+            "",
+            "---",
+            "",
+        ]
+
+    async def _initialize_conversation(self, topic: str) -> None:
+        """初始化对话主题和开始时间
+
+        Args:
+            topic: 对话主题
+        """
+        self.manager.topic = topic
+        self.manager.start_time = datetime.now()
+
+        topic_msg = MessageParam(
+            role="user",
+            content=f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
+        )
+        self.manager.messages.append(topic_msg)
+        self.manager.memory.add_message(topic_msg["role"], str(topic_msg["content"]))
+        logger.info(f"非交互式对话开始，主题: {topic}")
+
+    async def _process_agent_turn(self, agent) -> tuple[list[str], bool]:
+        """处理智能体轮次
+
+        Args:
+            agent: 智能体实例
+
+        Returns:
+            (输出行列表, 是否应该结束对话)
+        """
+        output = []
+        output.append(f"### [{agent.name}]")
+
+        response = await agent.respond(self.manager.messages, self.manager.interrupt)
+
+        if response is None:
+            return [], False
+
+        output.append(response)
+
+        # 添加引用行（如果有）
+        if hasattr(agent, "_last_citations_lines"):
+            citations_lines = agent._last_citations_lines
+            if citations_lines:
+                output.extend(citations_lines)
+
+        output.append("")
+
+        # 检测对话结束标记
+        end_result = self.manager.end_detector.detect(
+            response, current_turn=self.manager.turn + 1
+        )
+        if end_result.detected:
+            logger.info(f"{agent.name} 请求结束对话（非交互式）")
+            output.append("")
+            output.append("---")
+            output.append("")
+            output.append("⚠️ AI 请求结束对话")
+            return output, True
+
+        # 添加消息到历史
+        formatted_content = f"[{agent.name}]: {response}"
+        msg = MessageParam(role="assistant", content=formatted_content)
+        self.manager.messages.append(msg)
+        self.manager.memory.add_message(msg["role"], str(msg["content"]))
+        self.manager.turn += 1
+        logger.debug(f"轮次 {self.manager.turn}: {agent.name} 响应完成")
+
+        return output, False
+
+    async def _check_memory_trim_needed(self) -> bool:
+        """检查是否需要清理记忆
+
+        Returns:
+            是否应该退出对话（因为达到最大清理次数）
+        """
+        status = self.manager.memory.get_status()
+        if status == "red":
+            self.manager._trim_count += 1
+            if self.manager.should_exit_after_trim():
+                self.manager.summary = await self.manager._summarize_conversation()
+                return True
+        return False
+
+    def _format_conversation_output(
+        self, topic: str, summary: str | None, turn_count: int, token_count: int
+    ) -> list[str]:
+        """格式化对话输出
+
+        Args:
+            topic: 对话主题
+            summary: 对话总结
+            turn_count: 轮次数
+            token_count: token 数量
+
+        Returns:
+            格式化的输出行
+        """
+        output = []
+
+        # 添加总结（如果有）
+        if summary and isinstance(summary, str):
+            output.append("")
+            output.append("---")
+            output.append("")
+            output.append("## 📝 对话总结")
+            output.append("")
+            output.append(summary)
+
+        # 添加统计
+        output.append("")
+        output.append("---")
+        output.append("")
+        output.append(f"📊 **统计**: {turn_count} 轮对话, {token_count} tokens")
+
+        return output
+
     async def run_auto(self, topic: str, max_turns: int = 500) -> str:
         """非交互式自动运行对话
 
@@ -113,25 +242,11 @@ class FlowController:
         Returns:
             对话输出文本
         """
-        # 保存主题和开始时间
-        self.manager.topic = topic
-        self.manager.start_time = datetime.now()
-
-        # 初始化主题
-        topic_msg = MessageParam(
-            role="user",
-            content=f"对话主题：{topic}\n\n请根据你们的角色展开探讨。",
-        )
-        self.manager.messages.append(topic_msg)
-        self.manager.memory.add_message(topic_msg["role"], str(topic_msg["content"]))
-        logger.info(f"非交互式对话开始，主题: {topic}")
+        # 初始化对话
+        await self._initialize_conversation(topic)
 
         # 收集输出
-        output = []
-        output.append(f"🎯 **对话主题**: {topic}")
-        output.append("")
-        output.append("---")
-        output.append("")
+        output = self._initialize_output_header(topic)
 
         # 主对话循环
         for _ in range(max_turns):
@@ -151,58 +266,20 @@ class FlowController:
                     output.append(await self._execute_search(search_query))
 
             # 执行智能体响应
-            output.append(f"### [{current_agent.name}]")
-            response = await current_agent.respond(
-                self.manager.messages, self.manager.interrupt
-            )
+            turn_output, should_end = await self._process_agent_turn(current_agent)
+            output.extend(turn_output)
 
-            if response is not None:
-                output.append(response)
+            if should_end:
+                break
 
-                # 添加引用行（如果有）
-                if hasattr(current_agent, "_last_citations_lines"):
-                    citations_lines = current_agent._last_citations_lines
-                    if citations_lines:
-                        output.extend(citations_lines)
-
+            # 检查记忆状态
+            should_exit = await self._check_memory_trim_needed()
+            if should_exit:
                 output.append("")
-
-                # 检测对话结束标记
-                end_result = self.manager.end_detector.detect(
-                    response, current_turn=self.manager.turn + 1
-                )
-                if end_result.detected:
-                    logger.info(f"{current_agent.name} 请求结束对话（非交互式）")
-                    output.append("")
-                    output.append("---")
-                    output.append("")
-                    output.append("⚠️ AI 请求结束对话")
-                    break
-
-                formatted_content = f"[{current_agent.name}]: {response}"
-                msg = MessageParam(role="assistant", content=formatted_content)
-                self.manager.messages.append(msg)
-                self.manager.memory.add_message(msg["role"], str(msg["content"]))
-                self.manager.turn += 1
-                logger.debug(f"轮次 {self.manager.turn}: {current_agent.name} 响应完成")
-
-                # 检查记忆状态
-                status = self.manager.memory.get_status()
-                if status == "red":
-                    self.manager._trim_count += 1
-                    if self.manager.should_exit_after_trim():
-                        self.manager.summary = (
-                            await self.manager._summarize_conversation()
-                        )
-                        output.append("")
-                        output.append("---")
-                        output.append("")
-                        output.append("⚠️ 对话结束（上下文超限）")
-                        break
-            else:
-                logger.debug(
-                    f"轮次 {self.manager.turn}: {current_agent.name} 响应被中断"
-                )
+                output.append("---")
+                output.append("")
+                output.append("⚠️ 对话结束（上下文超限）")
+                break
 
             # 切换到下一个智能体
             self.manager.current = 1 - self.manager.current
@@ -211,30 +288,137 @@ class FlowController:
         if not self.manager.summary:
             self.manager.summary = await self.manager._summarize_conversation()
 
-        # 添加总结到输出（如果有且是字符串）
-        summary = self.manager.summary
-        if summary and isinstance(summary, str):
-            output.append("")
-            output.append("---")
-            output.append("")
-            output.append("## 📝 对话总结")
-            output.append("")
-            output.append(summary)
-
-        # 添加统计和结尾
-        output.append("")
-        output.append("---")
-        output.append("")
-        output.append(
-            f"📊 **统计**: {self.manager.turn} 轮对话, "
-            f"{self.manager.memory._total_tokens} tokens"
+        # 格式化输出
+        summary_output = self._format_conversation_output(
+            topic=topic,
+            summary=self.manager.summary,
+            turn_count=self.manager.turn,
+            token_count=self.manager.memory._total_tokens,
         )
+        output.extend(summary_output)
 
         # 保存对话到文件
         self.manager.save_conversation()
         logger.info("非交互式对话完成")
 
         return "\n".join(output)
+
+    async def _check_and_execute_tools(self, agent) -> None:
+        """检查并执行工具调用
+
+        Args:
+            agent: 智能体实例
+        """
+        if (
+            self.manager.enable_tools
+            and self.manager.tool_interval > 0
+            and self.manager.turn % self.manager.tool_interval == 0
+            and self.manager.turn > 0
+        ):
+            tool_result = await agent.query_tool("总结当前对话", self.manager.messages)
+            if tool_result:
+                # 将工具结果注入到对话历史
+                tool_message = MessageParam(
+                    role="user",
+                    content=f"[上下文更新]\n{tool_result}",
+                )
+                self.manager.messages.append(tool_message)
+                self.manager.memory.add_message(
+                    tool_message["role"], str(tool_message["content"])
+                )
+
+    async def _handle_ai_search_request(self, agent, initial_response: str) -> str:
+        """处理 AI 搜索请求
+
+        Args:
+            agent: 智能体实例
+            initial_response: 初始响应（可能包含搜索请求）
+
+        Returns:
+            最终响应内容
+        """
+        if self.search_handler.has_search_request(initial_response):
+            search_query = self.search_handler.extract_search_from_response(
+                initial_response
+            )
+            if search_query:
+                await self._execute_ai_requested_search(agent, search_query)
+                # 重新生成响应
+                response = await agent.respond(
+                    self.manager.messages, self.manager.interrupt
+                )
+                if response:
+                    console.print()  # 换行
+                    response = self._clean_response_prefix(response, agent.name)
+                    return response
+
+        return initial_response
+
+    async def _execute_agent_response(
+        self, agent, monitor_input: bool = True
+    ) -> str | None:
+        """执行智能体响应
+
+        Args:
+            agent: 智能体实例
+            monitor_input: 是否监听用户输入
+
+        Returns:
+            响应内容，如果被中断则返回 None
+        """
+        # 打印智能体名称
+        print(f"\n[{agent.name}]: ", end="", flush=True)
+
+        # 创建输入监听任务
+        input_monitor_task = None
+        if monitor_input:
+            input_monitor_task = asyncio.create_task(
+                self.interaction_handler.wait_for_user_input()
+            )
+
+        # 智能体响应
+        try:
+            response = await agent.respond(
+                self.manager.messages, self.manager.interrupt
+            )
+        finally:
+            if input_monitor_task:
+                input_monitor_task.cancel()
+                try:
+                    await input_monitor_task
+                except asyncio.CancelledError:
+                    pass
+
+        console.print()  # 换行
+
+        if response is None:
+            return None
+
+        # 清理响应前缀
+        response = self._clean_response_prefix(response, agent.name)
+
+        # 处理 AI 主动请求搜索
+        response = await self._handle_ai_search_request(agent, response)
+
+        return response
+
+    def _add_agent_message(self, agent, content: str, to_memory: bool = True) -> None:
+        """添加智能体消息到对话历史
+
+        Args:
+            agent: 智能体实例
+            content: 响应内容
+            to_memory: 是否添加到记忆
+        """
+        formatted_content = f"[{agent.name}]: {content}"
+        msg = MessageParam(role="assistant", content=formatted_content)
+        self.manager.messages.append(msg)
+
+        if to_memory:
+            self.manager.memory.add_message(msg["role"], str(msg["content"]))
+
+        self.manager.turn += 1
+        logger.debug(f"轮次 {self.manager.turn}: {agent.name} 响应完成")
 
     async def _turn(self):
         """执行一轮对话"""
@@ -249,77 +433,16 @@ class FlowController:
             if search_query:
                 await self._execute_search_interactive(search_query)
 
-        # 检查是否触发工具调用
-        if (
-            self.manager.enable_tools
-            and self.manager.tool_interval > 0
-            and self.manager.turn % self.manager.tool_interval == 0
-            and self.manager.turn > 0
-        ):
-            tool_result = await current_agent.query_tool(
-                "总结当前对话", self.manager.messages
-            )
-            if tool_result:
-                # 将工具结果注入到对话历史
-                tool_message = MessageParam(
-                    role="user",
-                    content=f"[上下文更新]\n{tool_result}",
-                )
-                self.manager.messages.append(tool_message)
-                self.manager.memory.add_message(
-                    tool_message["role"], str(tool_message["content"])
-                )
+        # 检查并执行工具调用
+        await self._check_and_execute_tools(current_agent)
 
-        # 打印智能体名称
-        print(f"\n[{current_agent.name}]: ", end="", flush=True)
-
-        # 创建输入监听任务
-        input_monitor_task = asyncio.create_task(
-            self.interaction_handler.wait_for_user_input()
-        )
-
-        # 智能体响应
-        try:
-            response = await current_agent.respond(
-                self.manager.messages, self.manager.interrupt
-            )
-        finally:
-            input_monitor_task.cancel()
-            try:
-                await input_monitor_task
-            except asyncio.CancelledError:
-                pass
-
-        console.print()  # 换行
+        # 执行智能体响应
+        response = await self._execute_agent_response(current_agent)
 
         # 如果未被中断，记录响应
         if response is not None:
-            # 清理响应前缀
-            response = self._clean_response_prefix(response, current_agent.name)
-
-            # 检查 AI 主动请求搜索
-            if self.search_handler.has_search_request(response):
-                search_query = self.search_handler.extract_search_from_response(
-                    response
-                )
-                if search_query:
-                    await self._execute_ai_requested_search(current_agent, search_query)
-                    # 重新生成响应
-                    response = await current_agent.respond(
-                        self.manager.messages, self.manager.interrupt
-                    )
-                    if response:
-                        console.print()  # 换行
-                        response = self._clean_response_prefix(
-                            response, current_agent.name
-                        )
-
-            formatted_content = f"[{current_agent.name}]: {response}"
-            msg = MessageParam(role="assistant", content=formatted_content)
-            self.manager.messages.append(msg)
-            self.manager.memory.add_message(msg["role"], str(msg["content"]))
-            self.manager.turn += 1
-            logger.debug(f"轮次 {self.manager.turn}: {current_agent.name} 响应完成")
+            # 添加消息到历史
+            self._add_agent_message(current_agent, response, to_memory=True)
 
             # 显示 token 进度（每轮显示）
             ProgressDisplay.show_token_progress(
@@ -392,6 +515,28 @@ class FlowController:
 
         return msg
 
+    async def _process_search_result(self, search_result: str | None, log_prefix: str):
+        """处理搜索结果并添加到对话历史
+
+        Args:
+            search_result: 搜索结果文本（可能为 None）
+            log_prefix: 日志前缀（用于区分不同搜索来源）
+        """
+        if search_result:
+            search_message = MessageParam(
+                role="user",
+                content=f"[系统消息 - 网络搜索结果]\n{search_result}",
+            )
+            self.manager.messages.append(search_message)
+            self.manager.memory.add_message(
+                search_message["role"], str(search_message["content"])
+            )
+            logger.info(
+                f"{log_prefix}结果已注入，当前消息数: {len(self.manager.messages)}"
+            )
+        else:
+            logger.warning(f"{log_prefix}未返回有效结果")
+
     async def _execute_search_interactive(self, query: str):
         """交互模式下执行搜索"""
         print(
@@ -406,20 +551,13 @@ class FlowController:
 
         if search_result:
             console.print(" ✅")
-            search_message = MessageParam(
-                role="user",
-                content=f"[系统消息 - 网络搜索结果]\n{search_result}",
-            )
-            self.manager.messages.append(search_message)
-            self.manager.memory.add_message(
-                search_message["role"], str(search_message["content"])
-            )
-            logger.info(
-                f"搜索结果已注入对话历史，当前消息数: {len(self.manager.messages)}"
-            )
         else:
             console.print(" ⚠️ (无结果)")
-            logger.warning(f"第 {self.manager.turn} 轮网络搜索未返回有效结果")
+
+        await self._process_search_result(
+            search_result=search_result,
+            log_prefix=f"第 {self.manager.turn} 轮网络搜索",
+        )
 
     async def _execute_ai_requested_search(self, agent, query: str):
         """执行 AI 主动请求的搜索"""
@@ -436,20 +574,13 @@ class FlowController:
 
         if search_result:
             console.print(" ✅")
-            search_message = MessageParam(
-                role="user",
-                content=f"[系统消息 - 网络搜索结果]\n{search_result}",
-            )
-            self.manager.messages.append(search_message)
-            self.manager.memory.add_message(
-                search_message["role"], str(search_message["content"])
-            )
-            logger.info(
-                f"AI 请求的搜索结果已注入，当前消息数: {len(self.manager.messages)}"
-            )
         else:
             console.print(" ⚠️ (无结果)")
-            logger.warning("AI 请求的搜索未返回有效结果")
+
+        await self._process_search_result(
+            search_result=search_result,
+            log_prefix="AI 请求的搜索",
+        )
 
     async def _handle_memory_trim(self):
         """处理记忆清理"""

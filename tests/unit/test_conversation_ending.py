@@ -10,7 +10,7 @@ Unit tests for Conversation Ending Detection (Redesigned)
 
 import pytest
 
-from mind.conversation_ending import (
+from mind.conversation.ending_detector import (
     ConversationEndConfig,
     ConversationEndDetector,
     EndProposal,

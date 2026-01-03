@@ -29,7 +29,7 @@ class TestAgentDocumentPool:
     def test_init_with_max_documents_config(self):
         """测试：应支持配置最大文档数"""
         # Arrange & Act - 新架构需要在初始化时配置
-        from mind.prompts import SettingsConfig
+        from mind.config import SettingsConfig
 
         settings = SettingsConfig()
         settings.documents.max_documents = 10
@@ -41,7 +41,7 @@ class TestAgentDocumentPool:
     def test_init_with_document_ttl_config(self):
         """测试：应支持配置文档存活时间"""
         # Arrange & Act - 新架构需要在初始化时配置
-        from mind.prompts import SettingsConfig
+        from mind.config import SettingsConfig
 
         settings = SettingsConfig()
         settings.documents.ttl = 5
@@ -111,7 +111,7 @@ class TestAgentDocumentOperations:
     async def test_max_documents_limit(self):
         """测试：超过最大文档数时应移除最旧的文档"""
         # Arrange - 新架构需要在初始化时设置 max_documents
-        from mind.prompts import SettingsConfig
+        from mind.config import SettingsConfig
 
         settings = SettingsConfig()
         settings.documents.max_documents = 2
@@ -251,7 +251,7 @@ class TestAgentDocumentCleanup:
     async def test_cleanup_documents_by_ttl(self):
         """测试：应能根据 TTL 清理过期文档"""
         # Arrange - 新架构需要在初始化时设置 document_ttl
-        from mind.prompts import SettingsConfig
+        from mind.config import SettingsConfig
 
         settings = SettingsConfig()
         settings.documents.ttl = 3
@@ -279,7 +279,7 @@ class TestAgentDocumentCleanup:
     async def test_cleanup_zero_ttl_keeps_all(self):
         """测试：TTL 为 0 时不应清理任何文档"""
         # Arrange - 新架构需要在初始化时设置 document_ttl
-        from mind.prompts import SettingsConfig
+        from mind.config import SettingsConfig
 
         settings = SettingsConfig()
         settings.documents.ttl = 0

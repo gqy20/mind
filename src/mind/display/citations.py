@@ -6,6 +6,32 @@
 from mind.agents.utils import console
 
 
+def _deduplicate_citations(citations: list[dict]) -> list[dict]:
+    """对引用列表进行去重
+
+    相同的文档标题和引用文本（前100字符）只保留首次出现的记录。
+
+    Args:
+        citations: 引用信息列表
+
+    Returns:
+        去重后的引用列表，保持原始顺序
+    """
+    unique_citations = []
+    seen = set()
+
+    for citation in citations:
+        key = (
+            citation.get("document_title", ""),
+            citation.get("cited_text", "")[:100],
+        )
+        if key not in seen:
+            seen.add(key)
+            unique_citations.append(citation)
+
+    return unique_citations
+
+
 def format_citations(citations: list[dict]) -> list[str]:
     """格式化引用列表为文本行
 
@@ -18,17 +44,8 @@ def format_citations(citations: list[dict]) -> list[str]:
     if not citations:
         return []
 
-    # 去重（相同的文档标题和引用文本只显示一次）
-    unique_citations = []
-    seen = set()
-    for citation in citations:
-        key = (
-            citation.get("document_title", ""),
-            citation.get("cited_text", "")[:100],
-        )
-        if key not in seen:
-            seen.add(key)
-            unique_citations.append(citation)
+    # 使用提取的去重函数
+    unique_citations = _deduplicate_citations(citations)
 
     lines: list[str] = []
     lines.append("")  # 空行
@@ -60,17 +77,8 @@ def display_citations(citations: list[dict]) -> None:
     if not citations:
         return
 
-    # 去重（相同的文档标题和引用文本只显示一次）
-    unique_citations = []
-    seen = set()
-    for citation in citations:
-        key = (
-            citation.get("document_title", ""),
-            citation.get("cited_text", "")[:100],
-        )
-        if key not in seen:
-            seen.add(key)
-            unique_citations.append(citation)
+    # 使用提取的去重函数
+    unique_citations = _deduplicate_citations(citations)
 
     # 使用 Rich 格式化输出
     console.print()

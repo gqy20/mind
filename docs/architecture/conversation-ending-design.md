@@ -204,12 +204,16 @@ def _handle_end_proposal(self, proposal: EndProposal) -> None:
 
 ```
 src/mind/
-├── conversation_ending.py      # 结束检测模块（重新设计）
-├── conversation.py              # 对话管理器（添加集成）
+├── conversation/
+│   └── ending_detector.py      # 结束检测模块（已迁移）
+├── conversation.py              # 对话管理器（manager.py，添加集成）
 └── cli.py                      # CLI 入口（更新 prompt）
 
 tests/unit/
-└── test_conversation_ending.py # 单元测试（重写）
+├── test_conversation_ending.py         # 单元测试（已保留）
+├── test_conversation_ending_migration.py # 迁移验证测试
+└── conversation/
+    └── test_ending_detector.py         # 结束检测器测试
 ```
 
 ## 实施步骤

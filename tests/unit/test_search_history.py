@@ -13,7 +13,7 @@ class TestSearchHistoryInit:
     def test_init_creates_file_if_not_exists(self, tmp_path):
         """测试：初始化时应创建文件"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         file_path = tmp_path / "search_history.json"
 
@@ -27,7 +27,7 @@ class TestSearchHistoryInit:
     def test_init_loads_existing_file(self, tmp_path):
         """测试：初始化时应加载已有文件"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         file_path = tmp_path / "search_history.json"
         existing_data = {
@@ -55,7 +55,7 @@ class TestSearchHistorySave:
     def test_save_search_adds_to_history(self, tmp_path):
         """测试：保存搜索应添加到历史记录"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         results = [{"title": "Python", "href": "http://test.com", "body": "..."}]
@@ -71,7 +71,7 @@ class TestSearchHistorySave:
     def test_save_search_includes_timestamp(self, tmp_path):
         """测试：保存搜索应包含时间戳"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         results = [{"title": "Test"}]
@@ -87,7 +87,7 @@ class TestSearchHistorySave:
     def test_save_search_persists_to_file(self, tmp_path):
         """测试：保存搜索应持久化到文件"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         file_path = tmp_path / "persist.json"
         history = SearchHistory(file_path=file_path)
@@ -105,7 +105,7 @@ class TestSearchHistorySave:
     def test_save_multiple_searches(self, tmp_path):
         """测试：应支持保存多个搜索"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
 
@@ -126,7 +126,7 @@ class TestSearchHistoryGetLatest:
     def test_get_latest_returns_most_recent_first(self, tmp_path):
         """测试：应按时间倒序返回"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         history.save_search("old", [{"title": "Old"}])
@@ -144,7 +144,7 @@ class TestSearchHistoryGetLatest:
     def test_get_latest_respects_limit(self, tmp_path):
         """测试：应遵守数量限制"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         for i in range(5):
@@ -162,7 +162,7 @@ class TestSearchHistoryGetLatest:
     def test_get_latest_when_empty(self, tmp_path):
         """测试：空历史应返回空列表"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
 
@@ -175,7 +175,7 @@ class TestSearchHistoryGetLatest:
     def test_get_latest_limit_exceeds_history(self, tmp_path):
         """测试：限制超过历史数量时应返回全部"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         history.save_search("only", [{"title": "Only"}])
@@ -194,7 +194,7 @@ class TestSearchHistorySearch:
     def test_search_history_finds_matches(self, tmp_path):
         """测试：应在历史中找到匹配项"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         history.save_search("Python programming", [{"title": "Python Guide"}])
@@ -213,7 +213,7 @@ class TestSearchHistorySearch:
     def test_search_history_case_insensitive(self, tmp_path):
         """测试：搜索应不区分大小写"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         history.save_search("Python", [{"title": "Test"}])
@@ -227,7 +227,7 @@ class TestSearchHistorySearch:
     def test_search_history_no_matches(self, tmp_path):
         """测试：无匹配时应返回空列表"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         history.save_search("Python", [{"title": "Test"}])
@@ -241,7 +241,7 @@ class TestSearchHistorySearch:
     def test_search_history_empty_pattern(self, tmp_path):
         """测试：空模式应返回所有"""
         # Arrange
-        from mind.search_history import SearchHistory
+        from mind.tools.search_history import SearchHistory
 
         history = SearchHistory(file_path=tmp_path / "test.json")
         history.save_search("query1", [{"title": "1"}])

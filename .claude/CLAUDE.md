@@ -68,8 +68,7 @@ make clean
 
 ```
 src/mind/
-├── agent.py              # Agent 类 - 对外统一接口（向后兼容）
-├── conversation.py       # ConversationManager - 对话管理器
+├── manager.py           # ConversationManager - 对话管理器（主入口）
 ├── cli.py               # CLI 入口和配置
 │
 ├── agents/              # 智能体模块（核心实现）
@@ -77,23 +76,38 @@ src/mind/
 │   ├── client.py        # AnthropicClient - API 客户端封装
 │   ├── response.py      # ResponseHandler - 流式响应和工具调用
 │   ├── documents.py     # DocumentPool - Citations 文档池管理
-│   ├── prompts.py       # PromptBuilder - 提示词构建
-│   ├── analysis.py      # ConversationAnalyzer - 对话分析
+│   ├── prompt_builder.py # PromptBuilder - 提示词构建
+│   ├── conversation_analyzer.py # ConversationAnalyzer - 对话分析
+│   ├── utils.py         # 工具函数
+│   └── summarizer.py    # SummarizerAgent - 对话总结智能体
+│
+├── conversation/        # 对话处理模块（处理器模式）
+│   ├── flow.py          # FlowController - 流程控制器（主循环）
+│   ├── interaction.py   # InteractionHandler - 用户交互处理
+│   ├── search_handler.py # SearchHandler - 搜索逻辑处理
+│   ├── ending.py        # EndingHandler - 对话结束处理
+│   ├── ending_detector.py # ConversationEndDetector - 结束检测器
+│   ├── memory.py        # MemoryManager - token 管理和上下文清理
+│   └── progress.py      # ProgressDisplay - 进度显示
+│
+├── display/             # UI 显示模块
 │   ├── citations.py     # 引用显示工具
-│   └── utils.py         # 工具函数
+│   └── progress.py      # 进度显示
 │
 ├── tools/               # 工具扩展模块
 │   ├── search_tool.py   # 网络搜索工具（duckduckgo）
+│   ├── search_history.py # SearchHistory - 搜索历史持久化
 │   ├── tool_agent.py    # ToolAgent - 工具智能体（代码分析等）
 │   ├── sdk_tool_manager.py  # SDK 工具管理器（MCP 集成）
+│   ├── adapters/        # 工具适配器
+│   │   └── tool_adapter.py  # ToolAdapter - 统一工具调用接口
 │   └── mcp/             # MCP 服务器实现
+│       ├── tools.py     # MCP 工具定义
+│       ├── servers.py   # MCP 服务器配置
+│       └── hooks.py     # MCP Hook 系统
 │
 ├── prompts.yaml         # 智能体提示词和系统配置
-├── prompts.py           # 配置加载器（Pydantic 模型）
-├── search_history.py    # SearchHistory - 搜索历史持久化
-├── memory.py            # MemoryManager - token 管理和上下文清理
-├── conversation_ending.py  # ConversationEndDetector - 对话结束检测
-├── summarizer.py        # SummarizerAgent - 对话总结智能体
+├── config.py            # 配置加载器（Pydantic 模型）
 └── logger.py            # 日志配置（loguru）
 ```
 
@@ -107,13 +121,17 @@ src/mind/
 - `query_tool(question, messages)`: 分析对话上下文（委托给 ConversationAnalyzer）
 - `add_document(doc)`: 添加文档到池（委托给 DocumentPool）
 
+**ConversationAnalyzer** (`agents/conversation_analyzer.py`)：对话分析
+- `analyze_context(messages, question)`: 分析对话上下文回答问题
+- 通过 `agents/__init__.py` 的延迟导入导出
+
 **AnthropicClient** (`agents/client.py`)：API 客户端封装
 - 封装 AsyncAnthropic 客户端创建
 - 支持 ANTHROPIC_BASE_URL 环境变量
 
 **ResponseHandler** (`agents/response.py`)：流式响应和工具调用
 - `respond(messages, system, interrupt)`: 主响应循环
-- `_execute_tool_search(tool_call, ...)`: 执行搜索工具
+- `_execute_tool_search(tool_call, ...)`: 执行搜索工具（duckduckgo）
 - `_continue_response(...)`: 基于工具结果继续生成
 - `_handle_api_status_error(e)`: API 错误处理（401/429/5xx）
 
@@ -122,34 +140,51 @@ src/mind/
 - 检测 `tool_use` 类型的 content_block，收集工具调用
 - 支持 Citations API（捕获 `citations_delta` 事件）
 
-### 2. ConversationManager 类 (`conversation.py`)
+**SummarizerAgent** (`agents/summarizer.py`)：对话总结
+- `summarize(messages, topic, interrupt)`: 生成对话总结
+- 在达到最大清理次数时自动调用
+- 通过 `agents/__init__.py` 的延迟导入导出
 
-协调两个智能体的对话循环。
+**PromptBuilder** (`agents/prompt_builder.py`)：提示词构建器
+- `build(has_tools, tool_agent)`: 构建最终提示词
+- `get_time_aware_prompt()`: 生成时间感知的提示词（包含当前日期和时效性指导）
+- 自动检测是否需要添加工具使用说明
+- 支持双语搜索策略指导（中文+英文）
 
-**状态字段**：
-- `messages`: 对话历史（Anthropic 格式）
-- `interrupt`: asyncio.Event，用于中断
-- `current`: 0=A, 1=B（轮次切换）
-- `turn`: 当前轮次计数
-- `memory`: MemoryManager（token 管理）
-- `search_history`: SearchHistory（搜索历史）
-- `enable_tools/enable_search`: 功能开关
-- `end_detector`: ConversationEndDetector（对话结束检测）
+### 2. 对话管理架构（`manager.py` + `conversation/` + `display/`）
 
-**核心方法**：
+采用 **处理器模式** 分离关注点：
+
+**ConversationManager** (`manager.py`)：核心协调器
+- 委托模式：将复杂逻辑委托给专门的处理器
+- `flow_controller`: FlowController 实例（延迟初始化）
+
+**FlowController** (`conversation/flow.py`)：对话流程控制
 - `start(topic)`: 交互式对话循环
 - `run_auto(topic, max_turns)`: 非交互式自动运行
 - `_turn()`: 执行一轮对话
-- `_input_mode()`: 用户输入模式
-- `_handle_user_input(user_input)`: 处理用户输入
-- `save_conversation()`: 保存对话到 JSON
+- 内置三个处理器：interaction_handler, search_handler, ending_handler
+
+**InteractionHandler** (`conversation/interaction.py`)：用户交互处理
+- `input_mode()`: 输入模式（等待用户输入）
+- `wait_for_user_input()`: 后台监听用户输入（非阻塞）
+- `handle_user_input(user_input)`: 处理用户命令（/quit, /clear）
+
+**SearchHandler** (`conversation/search_handler.py`)：搜索逻辑
+- `should_trigger_search()`: 判断是否触发搜索
+- `extract_search_query()`: 从对话历史提取关键词
+- `has_search_request()` / `extract_search_from_response()`: 检测 AI 主动请求
+
+**EndingHandler** (`conversation/ending.py`)：对话结束处理
+- `handle_proposal(agent_name, response)`: 处理 AI 的结束提议
 
 **关键机制 - 非阻塞输入检测**：
 ```python
-def _is_input_ready():
+@staticmethod
+def is_input_ready() -> bool:
     if not sys.stdin.isatty():
         return False
-    return select.select([sys.stdin], [], [], 0)[0]
+    return bool(select.select([sys.stdin], [], [], 0)[0])
 ```
 
 **智能搜索触发**（优先级）：
@@ -170,7 +205,7 @@ def _is_input_ready():
 - `--tool-interval N`: 覆盖工具调用间隔
 - `--test-tools`: 测试工具扩展功能
 
-### 4. 配置系统 (`prompts.yaml` + `prompts.py`)
+### 4. 配置系统 (`prompts.yaml` + `config.py`)
 
 **配置结构**：
 ```yaml
@@ -192,24 +227,42 @@ settings:
 - `SettingsConfig`: 系统设置
 - `SearchConfig/DocumentsConfig/ConversationConfig/ToolsConfig`: 子配置
 
-### 5. 工具扩展模块 (`tools/`)
+### 5. 工具扩展和显示模块 (`tools/` + `display/`)
 
-**搜索工具** (`search_tool.py`)：
+**搜索工具** (`tools/search_tool.py`)：
 - `search_web(query, max_results)`: duckduckgo 搜索
 - `_search_sync(query, max_results)`: 同步包装器
 
-**ToolAgent** (`tool_agent.py`)：
+**搜索历史** (`tools/search_history.py`)：
+- 搜索历史持久化（JSON）
+- `save_search(query, results)`: 保存搜索
+- `get_latest(limit)`: 获取最新记录
+
+**引用显示** (`display/citations.py`)：
+- `display_citations(citations)`: 显示引用信息
+- `format_citations(citations)`: 格式化引用
+
+**进度显示** (`display/progress.py`)：
+- `ProgressDisplay`: 进度显示组件
+
+**ToolAgent** (`tools/tool_agent.py`)：
 - `analyze_codebase(path)`: 代码库分析
 - `read_file_analysis(path, question)`: 文件分析
 
-**SDKToolManager** (`sdk_tool_manager.py`)：
+**SDKToolManager** (`tools/sdk_tool_manager.py`)：
 - MCP 服务器集成（knowledge/code-analysis/web-search）
 - Hook 系统支持
 - 工具权限控制
 
+**ToolAdapter** (`tools/adapters/tool_adapter.py`)：统一工具调用接口
+- 自动在 SDK ToolManager 和原始 ToolAgent 之间选择
+- 错误降级处理（SDK 失败时降级到原始实现）
+- 使用统计和监控
+- 环境变量控制：`MIND_USE_SDK_TOOLS`、`MIND_ENABLE_MCP`
+
 ### 6. 记忆和上下文管理
 
-**MemoryManager** (`memory.py`)：
+**MemoryManager** (`conversation/memory.py`)：
 - Token 计数和状态监控（green/yellow/red）
 - `trim_messages(messages)`: 清理历史，保留重要消息
 - 最大清理次数限制（`max_trim_count`）
@@ -219,32 +272,25 @@ settings:
 - `merge_into_messages(messages)`: 合并文档到消息
 - `from_search_history(search_entries)`: 搜索历史转文档
 
-**SearchHistory** (`search_history.py`)：
-- 搜索历史持久化（JSON）
-- `save_search(query, results)`: 保存搜索
-- `get_latest(limit)`: 获取最新记录
-
-### 7. 对话结束检测 (`conversation_ending.py`)
+### 7. 对话结束检测 (`conversation/ending_detector.py`)
 
 **ConversationEndDetector**：
 - `detect(response, current_turn)`: 检测 `<!-- END -->` 标记
 - `clean_response(response)`: 清理标记用于显示/保存
 
-**结束条件**：
-- 前 20 轮禁止结束
-- 需要用户确认（`require_confirmation`）
-
-### 8. 对话总结 (`summarizer.py`)
-
-**SummarizerAgent**：
-- `summarize(messages, topic, interrupt)`: 生成对话总结
-- 在达到最大清理次数时自动调用
+**配置 (ConversationEndConfig)**：
+- `enable_detection`: 是否启用检测
+- `end_marker`: 显式结束标记（默认 `<!-- END -->`）
+- `require_confirmation`: 是否需要用户确认
+- `min_turns_before_end`: 检测结束前所需的最小轮数（默认 20）
 
 ## 环境变量
 
 - `ANTHROPIC_API_KEY`: Anthropic API 密钥（必需）
 - `ANTHROPIC_BASE_URL`: API 基础 URL（可选）
 - `ANTHROPIC_MODEL`: 使用的模型（默认: claude-sonnet-4-5-20250929）
+- `MIND_USE_SDK_TOOLS`: 是否使用 SDK 工具管理器（默认: false）
+- `MIND_ENABLE_MCP`: 是否启用 MCP（默认: true）
 
 ## 交互流程
 
@@ -255,31 +301,37 @@ settings:
     ↓
 创建两个智能体（支持者 + 挑战者）
     ↓
-创建 ConversationManager（初始化 search_history/tool_agent）
+创建 ConversationManager（初始化 tools/search_history 和 tools/tool_agent）
     ↓
 用户输入主题
     ↓
-主循环:
+主循环 (FlowController.start):
   ├─ 检查用户输入（非阻塞 select.select）
-  │   └─ 有输入 → 进入 _input_mode()
-  ├─ 工具调用检查（tool_interval 兜底）
-  ├─ 智能搜索触发（AI 请求或间隔）
-  ├─ 执行一轮对话（A 或 B）
+  │   └─ 有输入 → 进入 InteractionHandler.input_mode()
+  ├─ 智能搜索触发（SearchHandler.should_trigger_search）
+  │   ├─ AI 主动请求（检测 [搜索: 关键词]）
+  │   └─ 固定间隔兜底（search_interval）
+  ├─ 执行一轮对话（_turn）
   │   ├─ 打印智能体名称
   │   ├─ 流式响应（ResponseHandler.respond）
   │   │   ├─ 处理 content_block_delta（text_delta/citations_delta）
-  │   │   ├─ 检测 tool_use 并执行
+  │   │   ├─ 检测 tool_use 并执行搜索或工具调用
+  │   │   │   ├─ search_web: 执行网络搜索（duckduckgo）
+  │   │   │   └─ query_tool: 调用工具扩展（ToolAgent/SDK）
   │   │   └─ 检查 interrupt 标志
+  │   ├─ 清理响应前缀
   │   ├─ 记录响应到历史
   │   ├─ 检测对话结束标记（<!-- END -->）
-  │   └─ Token 状态检查和清理
+  │   │   └─ 触发 EndingHandler.handle_proposal
+  │   ├─ Token 状态检查和清理（conversation/memory.py）
+  │   └─ 切换智能体（current = 1 - current）
   └─ 等待轮次间隔
 
-用户输入模式:
+用户输入模式 (InteractionHandler):
   ├─ 设置中断标志（interrupt.set()）
   ├─ 显示输入提示
   ├─ 获取用户输入
-  ├─ 处理命令或添加消息
+  ├─ 处理命令（/quit, /clear）或添加消息
   └─ 清除中断标志（interrupt.clear()）
 ```
 
@@ -290,10 +342,71 @@ settings:
 - 使用 `unittest.mock.AsyncMock` 隔离 Anthropic API 调用
 - 测试覆盖：初始化、流式响应、中断机制、工具调用、搜索集成
 
-**测试文件示例**：
+**测试迁移验证**：
+- 当进行模块重构时（如移动文件到子包），添加迁移验证测试
+- 使用 `test_*_migration.py` 命名约定，确保旧的导入路径仍然有效或明确失败
+- 示例：`test_summarizer_migration.py`、`test_rename_modules.py`
+
+**测试文件结构**：
 - `tests/unit/agents/test_*.py`: 智能体模块测试
-- `tests/unit/test_conversation*.py`: 对话管理器测试
+  - `test_agent.py`, `test_client.py`, `test_response.py`
+  - `test_documents.py`, `test_prompts.py`, `test_conversation_analyzer.py`
+  - `test_citations.py`, `test_summarizer.py`
+- `tests/unit/conversation/test_*.py`: 对话处理器测试
+  - `test_flow.py`, `test_interaction.py`, `test_search_handler.py`
+  - `test_ending.py`, `test_ending_detector.py`, `test_memory.py`
+- `tests/unit/display/test_*.py`: 显示模块测试
+  - `test_citations.py`, `test_progress.py`
 - `tests/unit/tools/test_*.py`: 工具模块测试
+  - `test_search_tool.py`, `test_search_history.py`
+  - `test_tool_agent.py`, `test_sdk_tool_manager.py`, `test_tool_adapter.py`
+- `tests/unit/test_*.py`: 顶层模块测试
+  - `test_cli.py`, `test_prompts.py`（配置加载测试）
+  - `test_conversation*.py`: 对话管理器集成测试
+
+## 重要架构细节
+
+### 模块组织原则
+项目采用清晰的模块分离策略：
+- **agents/**: 所有智能体相关实现（Agent、ResponseHandler、DocumentPool、ConversationAnalyzer 等）
+- **conversation/**: 对话流程控制（FlowController、各种 Handler、MemoryManager）
+- **display/**: UI 显示功能（引用显示、进度显示）
+- **tools/**: 工具扩展（搜索、搜索历史、代码分析、MCP 集成）
+- **顶层模块**: 配置加载、日志等跨领域功能
+- **向后兼容模块**: 项目保留了一些向后兼容的模块（如 `memory.py`、`search_history.py`、`agents/analysis.py`、`agents/citations.py`），这些模块仅用于重导出新位置的符号，便于渐进式迁移
+
+**命名约定**：
+- 模块文件名使用描述性名称（如 `prompt_builder.py` 而非 `prompts.py`）
+- Handler 类统一使用 `*Handler` 后缀（InteractionHandler、SearchHandler、EndingHandler）
+- 配置相关类使用 `*Config` 后缀（AgentConfig、SettingsConfig 等）
+
+### 延迟初始化和导入模式
+- `ConversationManager.flow_controller`: 使用延迟初始化，避免循环导入
+- `agents/__init__.py`: 使用 `__getattr__` 实现延迟导入（如 SummarizerAgent、ConversationAnalyzer）
+- `conversation/__init__.py`: 使用 `__getattr__` 实现延迟导入（如 FlowController、各种 Handler）
+- `display/__init__.py`: 使用 `__getattr__` 实现延迟导入（如 display_citations、ProgressDisplay）
+- 处理器在 `FlowController.__init__` 中创建
+
+### 非阻塞输入监听
+- `InteractionHandler.wait_for_user_input()` 在后台运行
+- 检测到输入时立即设置 `interrupt` 标志
+- 响应完成后取消监听任务
+
+### 响应清理机制
+- `FlowController._clean_response_prefix()`: 清理 AI 响应中的角色名前缀
+- `ConversationEndDetector.clean_response()`: 清理 `<!-- END -->` 标记
+
+### 工具适配器模式
+- `ToolAdapter` 提供统一的工具调用接口
+- 支持在 SDK ToolManager 和原始 ToolAgent 之间自动切换
+- 错误降级：SDK 失败时自动切换到原始实现
+- 环境变量控制：`MIND_USE_SDK_TOOLS`、`MIND_ENABLE_MCP`
+
+### Citations API 集成
+- `DocumentPool`: 管理搜索历史文档
+- `ResponseHandler` 捕获 `citations_delta` 事件
+- 引用信息通过 `SearchHistory` 自动持久化
+- 引用显示功能在 `display/citations.py` 中实现
 
 ## Pre-commit 钩子
 
@@ -303,3 +416,52 @@ settings:
 - 通用检查（trailing whitespace、yaml/json/toml 语法等）
 
 安装：`pre-commit install`
+
+## Claude Code 自定义命令
+
+项目在 `.claude/commands/` 目录下提供了两个自定义命令：
+
+### `/gh` - GitHub CLI 助手
+提供 GitHub CLI (gh) 的场景化指导，涵盖：
+- Issue 和 PR 管理
+- 仓库操作
+- Actions 和 CI/CD
+- Secrets 和 Variables
+- Codespaces 管理
+- Release 管理
+- 高级 API 操作
+
+### `/tdd` - 测试驱动开发助手
+遵循 TDD 红-绿-重构循环：
+- **红**：编写失败的测试 → `git commit -m "test: ..."`
+- **绿**：编写最少代码使测试通过 → `git commit -m "feat: ..."`
+- **重构**：在测试保护下优化代码 → `git commit -m "refactor: ..."`
+
+测试规范包括：
+- 测试文件镜像源码目录结构
+- AAA 模式（Arrange → Act → Assert）
+- 单一职责原则
+- Mock 规则（仅隔离外部依赖）
+- 覆盖率要求（核心逻辑 ≥80%）
+
+## GitHub Actions 工作流
+
+项目配置了三个 GitHub Actions 工作流（`.github/workflows/`）：
+
+### CI 工作流 (`ci.yml`)
+- **触发条件**：push/PR 到 main/develop 分支
+- **检查步骤**：
+  - 安装 uv 和依赖
+  - ruff check（代码检查）
+  - ruff format check（格式检查）
+  - mypy 类型检查
+  - pytest + 覆盖率
+  - 上传到 Codecov
+
+### 自动生成主题 (`auto-generate-topic.yml`)
+- **触发条件**：北京时间晚上 11 点到早上 6 点，每小时运行
+- **功能**：使用 Anthropic API 生成对话主题并自动创建 Issue
+
+### Issue 触发对话 (`issue-chat.yml`)
+- **触发条件**：手动触发或由 auto-generate-topic 触发
+- **功能**：根据 Issue 内容自动运行对话

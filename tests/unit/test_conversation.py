@@ -13,8 +13,8 @@ from unittest.mock import patch
 import pytest
 
 from mind.agents.agent import Agent
-from mind.conversation import ConversationManager
-from mind.memory import MemoryManager, TokenConfig
+from mind.conversation.memory import MemoryManager, TokenConfig
+from mind.manager import ConversationManager
 
 
 class TestConversationManagerInit:

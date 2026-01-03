@@ -1,7 +1,7 @@
 """
-Prompts 模块的单元测试
+Config 模块的单元测试
 
-测试提示词配置加载功能：
+测试配置加载功能：
 - 从 YAML 文件加载配置
 - 解析智能体配置
 - 处理配置文件不存在
@@ -12,7 +12,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from mind.prompts import AgentConfig, ConfigError, load_agent_configs
+from mind.config import AgentConfig, ConfigError, load_agent_configs
 
 
 class TestLoadAgentConfigs:
