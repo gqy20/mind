@@ -4,11 +4,10 @@
 """
 
 import asyncio
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from anthropic.types import MessageParam
 from rich.console import Console
@@ -19,6 +18,9 @@ from mind.conversation.interaction import InteractionHandler
 from mind.conversation.search_handler import SearchHandler
 from mind.display.progress import ProgressDisplay
 from mind.logger import get_logger
+
+if TYPE_CHECKING:
+    from mind.agents.agent import Agent
 
 logger = get_logger("mind.conversation.flow")
 
@@ -249,6 +251,8 @@ class FlowController:
         output = self._initialize_output_header(topic)
 
         # 主对话循环
+        last_response = None  # 记录上一轮的响应，用于检测搜索请求
+
         for _ in range(max_turns):
             if not self.manager.is_running:
                 break
@@ -259,11 +263,23 @@ class FlowController:
                 else self.manager.agent_b
             )
 
-            # 检查是否触发搜索
-            if self.search_handler.should_trigger_search():
+            # 检查是否触发搜索（基于上一轮的响应）
+            if self.search_handler.should_trigger_search(last_response):
                 search_query = self.search_handler.extract_search_query()
                 if search_query:
+                    # 检查上一轮响应中是否有明确的搜索请求
+                    if last_response:
+                        explicit_query = (
+                            self.search_handler.extract_search_from_response(
+                                last_response
+                            )
+                        )
+                        if explicit_query:
+                            search_query = explicit_query
                     output.append(await self._execute_search(search_query))
+                    # 搜索后清空 last_response，避免重复触发
+                    last_response = None
+                    continue
 
             # 执行智能体响应
             turn_output, should_end = await self._process_agent_turn(current_agent)
@@ -271,6 +287,13 @@ class FlowController:
 
             if should_end:
                 break
+
+            # 提取响应文本（用于检测下一轮的搜索请求）
+            # turn_output 格式: ["### [Agent Name]", "response text", "", ...]
+            if len(turn_output) >= 2:
+                last_response = turn_output[1]  # 第二行是响应文本
+            else:
+                last_response = None
 
             # 检查记忆状态
             should_exit = await self._check_memory_trim_needed()
@@ -327,7 +350,9 @@ class FlowController:
                     tool_message["role"], str(tool_message["content"])
                 )
 
-    async def _handle_ai_search_request(self, agent, initial_response: str) -> str:
+    async def _handle_ai_search_request(
+        self, agent: "Agent", initial_response: str
+    ) -> str:
         """处理 AI 搜索请求
 
         Args:
@@ -347,10 +372,11 @@ class FlowController:
                 response = await agent.respond(
                     self.manager.messages, self.manager.interrupt
                 )
-                if response:
+                if response is not None:
                     console.print()  # 换行
-                    response = self._clean_response_prefix(response, agent.name)
                     return response
+                # 如果重新生成被中断，返回初始响应
+                return initial_response
 
         return initial_response
 
@@ -393,9 +419,6 @@ class FlowController:
 
         if response is None:
             return None
-
-        # 清理响应前缀
-        response = self._clean_response_prefix(response, agent.name)
 
         # 处理 AI 主动请求搜索
         response = await self._handle_ai_search_request(agent, response)
@@ -477,19 +500,6 @@ class FlowController:
     async def handle_end_proposal(self, agent_name: str, response: str):
         """处理结束提议（委托给 EndingHandler）"""
         await self.ending_handler.handle_proposal(agent_name, response)
-
-    def _clean_response_prefix(self, response: str, agent_name: str) -> str:
-        """清理响应中的角色名前缀"""
-        patterns_to_remove = [
-            rf"^\[{re.escape(agent_name)}\]:\s*",
-            rf"^\[{re.escape(agent_name)}]\uFF1A\s*",
-            rf"^\*\*{re.escape(agent_name)}\uFF1A\*\*\s*",
-            rf"^\*\*{re.escape(agent_name)}:\*\*\s*",
-            rf"^{re.escape(agent_name)}\uFF1A\s*",
-        ]
-        for pattern in patterns_to_remove:
-            response = re.sub(pattern, "", response, count=1).lstrip()
-        return response
 
     async def _execute_search(self, query: str) -> str:
         """执行搜索并返回结果消息"""

@@ -80,19 +80,24 @@ class TestMain:
         mock_manager.assert_not_called()
 
     @patch("mind.cli.check_config")
-    @patch("mind.cli.Agent")
+    @patch("mind.agents.AgentFactory")
     @patch("mind.cli.ConversationManager")
     @patch("mind.cli.input")
     @pytest.mark.asyncio
     async def test_main_creates_agents_and_manager(
-        self, mock_input, mock_manager, mock_agent, mock_check_config
+        self, mock_input, mock_manager, mock_factory, mock_check_config
     ):
         """测试：应创建两个智能体和对话管理器"""
         # Arrange
         mock_check_config.return_value = True
         mock_input.return_value = "测试主题"
         mock_agent_instance = MagicMock()
-        mock_agent.return_value = mock_agent_instance
+        mock_factory_instance = MagicMock()
+        mock_factory_instance.create_conversation_agents.return_value = {
+            "supporter": mock_agent_instance,
+            "challenger": mock_agent_instance,
+        }
+        mock_factory.return_value = mock_factory_instance
         mock_manager_instance = AsyncMock()
         mock_manager.return_value = mock_manager_instance
 
@@ -100,7 +105,8 @@ class TestMain:
         await main()
 
         # Assert
-        assert mock_agent.call_count == 2
+        mock_factory.assert_called_once()
+        mock_factory_instance.create_conversation_agents.assert_called_once()
         mock_manager.assert_called_once()
         mock_manager_instance.start.assert_called_once_with("测试主题")
 
@@ -151,7 +157,11 @@ class TestPromptsConfig:
         # Assert
         assert "supporter" in configs
         assert "challenger" in configs
+        assert "summarizer" in configs  # 新增：验证 summarizer 配置
         assert configs["supporter"].name == "支持者"
         assert configs["challenger"].name == "挑战者"
-        assert "支持者" in configs["supporter"].system_prompt
-        assert "挑战者" in configs["challenger"].system_prompt
+        assert configs["summarizer"].name == "总结助手"  # 新增：验证总结助手
+        # 验证 system_prompt 不为空
+        assert configs["supporter"].system_prompt
+        assert configs["challenger"].system_prompt
+        assert configs["summarizer"].system_prompt

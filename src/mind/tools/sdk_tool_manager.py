@@ -148,7 +148,7 @@ class SDKToolManager:
         Returns:
             Hook 配置字典
         """
-        from mind.tools.mcp.hooks import ToolHooks
+        from mind.tools.hooks import ToolHooks
 
         hook_manager = ToolHooks()
 

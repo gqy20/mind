@@ -1,4 +1,4 @@
-.PHONY: install check format test test-cov type clean run all help
+.PHONY: install check format test test-cov type clean run mind all help
 
 install:
 	uv pip install -e ".[dev]"
@@ -26,6 +26,9 @@ clean:
 run:
 	uv run mind
 
+mind:
+	uv run python -m mind.cli "人工智能最新进展" --non-interactive --max-turns 8
+
 all: check type test
 
 help:
@@ -37,5 +40,6 @@ help:
 	@echo "  make test-cov  - 测试 + 覆盖率"
 	@echo "  make type      - 类型检查 (mypy)"
 	@echo "  make run       - 运行程序"
+	@echo "  make mind      - 运行非交互式测试 (8 轮对话)"
 	@echo "  make clean     - 清理缓存"
 	@echo "  make all       - 检查 + 类型检查 + 测试"

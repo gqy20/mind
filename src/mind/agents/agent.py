@@ -99,6 +99,9 @@ class Agent:
 
         委托给 ResponseHandler 处理。
 
+        文档池中的文档通过 ResponseHandler 的 documents 参数传递给 API，
+        不需要合并到消息内容中（Citations API 要求）。
+
         Args:
             messages: 对话历史
             interrupt: 中断事件
@@ -106,11 +109,8 @@ class Agent:
         Returns:
             完整响应文本，如果被中断则返回 None
         """
-        # 如果需要，可以在消息中合并文档池
-        formatted_messages = self._format_messages_with_documents(messages)
-
         result = await self.response_handler.respond(
-            messages=formatted_messages,
+            messages=messages,
             system=self.system_prompt,
             interrupt=interrupt,
         )

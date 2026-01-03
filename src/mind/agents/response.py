@@ -5,13 +5,13 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from anthropic import APIStatusError
 from anthropic.types import ToolParam
 
 from mind.agents.client import AnthropicClient
-from mind.agents.utils import _clean_agent_name_prefix, console, logger
+from mind.agents.utils import console, logger
 from mind.config import SearchConfig
 from mind.display.citations import display_citations, format_citations
 
@@ -86,7 +86,6 @@ class ResponseHandler:
 
         if delta_type == "text_delta":
             text = getattr(event.delta, "text", "")
-            text = _clean_agent_name_prefix(text)
             response_text += text
             print(text, end="", flush=True)
             return response_text, True, citations_buffer
@@ -124,7 +123,6 @@ class ResponseHandler:
             return response_text, has_text_delta
 
         text = getattr(event, "text", "")
-        text = _clean_agent_name_prefix(text)
         response_text += text
         print(text, end="", flush=True)
         # 注意：旧格式 text 事件不改变 has_text_delta 标志
@@ -272,17 +270,12 @@ class ResponseHandler:
             logger.debug(f"工具调用检测完成，buffer 状态: {buffer_status}")
 
             if tool_use_buffer:
-                for tool_call in tool_use_buffer:
-                    if tool_call["name"] == "search_web":
-                        query = tool_call["input"].get("query", "")
-                        if query:
-                            result = await self._execute_tool_search(
-                                tool_call, messages, interrupt
-                            )
-                            if result is not None:
-                                response_text = result
-                    else:
-                        logger.warning(f"未知工具: {tool_call['name']}")
+                # 并行执行所有工具调用
+                parallel_result = await self._execute_tools_parallel(
+                    tool_use_buffer, messages, interrupt
+                )
+                if parallel_result is not None:
+                    response_text = parallel_result
 
         except APIStatusError as e:
             self._handle_api_status_error(e)
@@ -321,6 +314,8 @@ class ResponseHandler:
     ) -> str:
         """基于工具结果继续生成响应
 
+        支持处理继续生成时的工具调用。
+
         Args:
             messages: 包含工具结果的对话历史
             system: 系统提示词
@@ -332,6 +327,7 @@ class ResponseHandler:
         response_text = ""
         has_text_delta = False  # 标记是否处理过 text_delta
         citations_buffer: list[dict] = []  # 捕获引用信息
+        tool_use_buffer: list[dict] = []  # 收集工具调用
 
         # 获取 documents 列表（用于 Citations API）
         docs_list = self.documents.documents if self.documents else None
@@ -340,6 +336,7 @@ class ResponseHandler:
             async for event in self.client.stream(
                 messages=messages,
                 system=system,
+                tools=_get_tools_schema(),
                 documents=docs_list,
             ):
                 if interrupt.is_set():
@@ -361,8 +358,14 @@ class ResponseHandler:
                         event, response_text, has_text_delta
                     )
 
+                # 处理工具调用
                 elif event.type == "content_block_stop":
-                    pass
+                    tool_calls = self._extract_tool_calls(event)
+                    if tool_calls:
+                        logger.debug(
+                            f"继续生成时检测到工具调用: {tool_calls[0]['name']}"
+                        )
+                        tool_use_buffer.extend(tool_calls)
 
         except Exception as e:
             logger.exception(f"继续响应出错: {e}")
@@ -372,7 +375,111 @@ class ResponseHandler:
         if citations_buffer:
             display_citations(citations_buffer)
 
+        # 如果在继续生成时有新的工具调用，执行它们
+        if tool_use_buffer:
+            logger.info(f"继续生成时检测到 {len(tool_use_buffer)} 个工具调用")
+            for tool_call in tool_use_buffer:
+                if tool_call["name"] == "search_web":
+                    query = tool_call["input"].get("query", "")
+                    if query:
+                        result = await self._execute_tool_search(
+                            tool_call, messages, interrupt
+                        )
+                        if result:
+                            response_text += result
+                else:
+                    logger.warning(f"未知工具: {tool_call['name']}")
+
         return response_text
+
+    async def _execute_tools_parallel(
+        self,
+        tool_calls: list[dict],
+        messages: list["MessageParam"],
+        interrupt: asyncio.Event,
+    ) -> str | None:
+        """并行执行多个工具调用
+
+        Args:
+            tool_calls: 工具调用列表
+            messages: 对话历史
+            interrupt: 中断事件
+
+        Returns:
+            继续生成的响应文本
+        """
+        if not tool_calls:
+            return None
+
+        logger.info(f"开始并行执行 {len(tool_calls)} 个工具调用")
+
+        # 准备并行任务
+        async def execute_single_tool(tool_call: dict) -> dict | None:
+            """执行单个工具并返回结果
+
+            Returns:
+                (tool_call_id, result_text) 或 None
+            """
+            tool_name = tool_call.get("name", "")
+            if tool_name == "search_web":
+                result = await self._execute_tool_search(tool_call, messages, interrupt)
+                return {"id": tool_call.get("id"), "result": result}
+            else:
+                logger.warning(f"未知工具: {tool_name}")
+                return None
+
+        # 并行执行所有工具
+        tasks = [execute_single_tool(tc) for tc in tool_calls]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 过滤有效的结果
+        valid_results: list[dict] = [
+            cast(dict, r)
+            for r in results
+            if r is not None and not isinstance(r, Exception)
+        ]
+        for r in results:
+            if isinstance(r, Exception):
+                logger.exception(f"工具执行异常: {r}")
+
+        if not valid_results:
+            logger.warning("所有工具执行都失败了")
+            return None
+
+        # 构建符合 API 格式的消息
+        # Assistant: 所有 tool_use 块
+        tool_use_blocks: list[dict] = [
+            {
+                "type": "tool_use",
+                "id": tc["id"],
+                "name": tc.get("name", ""),
+                "input": tc.get("input", {}),
+            }
+            for tc in tool_calls
+        ]
+
+        # User: 所有 tool_result 块
+        tool_result_blocks: list[dict] = [
+            {
+                "type": "tool_result",
+                "tool_use_id": vr["id"],
+                "content": vr.get("result") or "",
+            }
+            for vr in valid_results
+        ]
+
+        # 添加到消息历史
+        messages.append({"role": "assistant", "content": tool_use_blocks})  # type: ignore[typeddict-item]
+        messages.append({"role": "user", "content": tool_result_blocks})  # type: ignore[typeddict-item]
+
+        logger.debug(
+            f"已添加 {len(tool_use_blocks)} 个 tool_use 和 "
+            f"{len(tool_result_blocks)} 个 tool_result 到消息历史"
+        )
+
+        # 基于工具结果继续生成
+        print(f"\n[{self.name}]: ", end="", flush=True)
+        return await self._continue_response(messages, "", interrupt)
 
     async def _execute_tool_search(
         self,
@@ -422,9 +529,10 @@ class ResponseHandler:
                 # 转换为 Citations 文档并添加到文档池
                 from mind.agents.documents import DocumentPool
 
-                citation_doc = DocumentPool.from_search_history(latest_searches)
+                citation_docs = DocumentPool.from_search_history(latest_searches)
                 if self.documents:
-                    self.documents.add(citation_doc)
+                    for doc in citation_docs:
+                        self.documents.add(doc)
 
                 # 构建工具结果消息（使用搜索结果的文本摘要）
                 search_result_text = (

@@ -78,49 +78,55 @@ class DocumentPool:
             return list(self.documents)
 
     @staticmethod
-    def from_search_history(search_entries: list[dict]) -> dict:
-        """将搜索历史记录转换为 Citations 文档
+    def from_search_history(search_entries: list[dict]) -> list[dict]:
+        """将搜索历史记录转换为 Citations 文档列表
+
+        每次搜索生成独立的文档，以便更精确的引用。
 
         Args:
             search_entries: 搜索记录列表（来自 SearchHistory）
 
         Returns:
-            Citations API 文档格式的字典
+            Citations API 文档格式的字典列表
         """
-        content_blocks = []
+        documents = []
 
         for entry in search_entries:
             query = entry.get("query", "未知查询")
             results = entry.get("results", [])
 
-            if results:
-                content_blocks.append({"type": "text", "text": f"\n## 搜索: {query}"})
-                for result in results:
-                    title = result.get("title", "无标题")
-                    href = result.get("href", "")
-                    body = result.get("body", "")
+            if not results:
+                continue
 
-                    block_parts = [title]
-                    if href:
-                        block_parts.append(f"来源: {href}")
-                    if body:
-                        short_body = body[:200] + "..." if len(body) > 200 else body
-                        block_parts.append(f"内容: {short_body}")
+            content_blocks = [{"type": "text", "text": f"搜索关键词: {query}"}]
 
-                    content_blocks.append(
-                        {"type": "text", "text": "\n".join(block_parts)}
-                    )
+            for result in results:
+                title = result.get("title", "无标题")
+                href = result.get("href", "")
+                body = result.get("body", "")
 
-        return {
-            "type": "document",
-            "source": {
-                "type": "content",
-                "content": content_blocks,
-            },
-            "title": "搜索历史记录",
-            "context": f"包含 {len(search_entries)} 次搜索结果",
-            "citations": {"enabled": True},
-        }
+                block_parts = [f"标题: {title}"]
+                if href:
+                    block_parts.append(f"来源: {href}")
+                if body:
+                    short_body = body[:300] + "..." if len(body) > 300 else body
+                    block_parts.append(f"内容摘要: {short_body}")
+
+                content_blocks.append({"type": "text", "text": "\n".join(block_parts)})
+
+            doc = {
+                "type": "document",
+                "source": {
+                    "type": "content",
+                    "content": content_blocks,
+                },
+                "title": f"搜索结果: {query}",
+                "context": f"找到 {len(results)} 条结果",
+                "citations": {"enabled": True},
+            }
+            documents.append(doc)
+
+        return documents
 
     def cleanup_old(self) -> None:
         """清理过期的文档

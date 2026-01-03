@@ -54,7 +54,7 @@ def test_document_pool_merge_into_messages():
 
 
 def test_document_pool_from_search_history():
-    """测试从搜索历史创建文档"""
+    """测试从搜索历史创建文档列表"""
     from mind.agents.documents import DocumentPool
 
     searches = [
@@ -70,7 +70,47 @@ def test_document_pool_from_search_history():
         }
     ]
 
-    doc = DocumentPool.from_search_history(searches)
+    docs = DocumentPool.from_search_history(searches)
 
+    # 应返回文档列表
+    assert isinstance(docs, list)
+    assert len(docs) == 1
+    doc = docs[0]
     assert doc["type"] == "document"
-    assert "搜索历史记录" in doc["title"]
+    assert "test query" in doc["title"]
+    assert doc["citations"]["enabled"] is True
+
+
+def test_document_pool_from_search_history_multiple():
+    """测试从多条搜索历史创建多个文档"""
+    from mind.agents.documents import DocumentPool
+
+    searches = [
+        {
+            "query": "query 1",
+            "results": [
+                {
+                    "title": "Result 1",
+                    "href": "http://example.com/1",
+                    "body": "Content 1",
+                },
+            ],
+        },
+        {
+            "query": "query 2",
+            "results": [
+                {
+                    "title": "Result 2",
+                    "href": "http://example.com/2",
+                    "body": "Content 2",
+                },
+            ],
+        },
+    ]
+
+    docs = DocumentPool.from_search_history(searches)
+
+    # 每次搜索生成独立的文档
+    assert len(docs) == 2
+    assert "query 1" in docs[0]["title"]
+    assert "query 2" in docs[1]["title"]

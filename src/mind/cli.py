@@ -162,20 +162,19 @@ async def main():
     tool_interval = args.tool_interval or settings.tools.tool_interval
     turn_interval = settings.conversation.turn_interval
 
-    # 配置两个智能体
-    supporter_config = agent_configs["supporter"]
-    supporter = Agent(
-        name=supporter_config.name,
-        system_prompt=supporter_config.system_prompt,
-        settings=settings,
+    # 使用工厂创建智能体
+    from mind.agents import AgentFactory
+
+    factory = AgentFactory(settings)
+    agents = factory.create_conversation_agents(
+        {
+            "supporter": agent_configs["supporter"],
+            "challenger": agent_configs["challenger"],
+        }
     )
 
-    challenger_config = agent_configs["challenger"]
-    challenger = Agent(
-        name=challenger_config.name,
-        system_prompt=challenger_config.system_prompt,
-        settings=settings,
-    )
+    supporter: Agent = agents["supporter"]  # type: ignore[assignment]
+    challenger: Agent = agents["challenger"]  # type: ignore[assignment]
 
     logger.info("双智能体创建完成: 支持者 vs 挑战者")
 

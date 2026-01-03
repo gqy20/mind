@@ -56,10 +56,6 @@ def format_citations(citations: list[dict]) -> list[str]:
         title = citation.get("document_title", "未知来源")
         cited_text = citation.get("cited_text", "")
 
-        # 限制引用文本长度
-        if len(cited_text) > 150:
-            cited_text = cited_text[:147] + "..."
-
         lines.append(f"[{i}] {title}")
         if cited_text:
             lines.append(f"    {cited_text}")
@@ -88,10 +84,6 @@ def display_citations(citations: list[dict]) -> None:
     for i, citation in enumerate(unique_citations, 1):
         title = citation.get("document_title", "未知来源")
         cited_text = citation.get("cited_text", "")
-
-        # 限制引用文本长度
-        if len(cited_text) > 150:
-            cited_text = cited_text[:147] + "..."
 
         console.print(f"[dim][{i}][/dim] [yellow]{title}[/yellow]")
         if cited_text:

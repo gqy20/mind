@@ -126,10 +126,18 @@ class ConversationManager:
             self.agent_b.tool_agent = tool_agent
             logger.info("工具扩展已启用，两个智能体共享 ToolAgent")
 
-        # 初始化总结智能体
+        # 初始化总结智能体（从配置加载）
         from mind.agents.summarizer import SummarizerAgent
+        from mind.config import get_default_config_path, load_agent_configs
 
-        self.summarizer_agent = SummarizerAgent()
+        config_path = get_default_config_path()
+        agent_configs = load_agent_configs(str(config_path))
+        summarizer_config = agent_configs["summarizer"]
+
+        self.summarizer_agent = SummarizerAgent(
+            name=summarizer_config.name,
+            system_prompt=summarizer_config.system_prompt,
+        )
         logger.info("总结智能体已初始化")
 
     @property

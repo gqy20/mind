@@ -35,17 +35,25 @@ class SummarizerAgent:
 
     def __init__(
         self,
+        name: str,
+        system_prompt: str,
         model: str | None = None,
         settings: "SettingsConfig | None" = None,
     ):
         """初始化总结智能体
 
         Args:
+            name: 智能体名称
+            system_prompt: 系统提示词
             model: 使用的模型，默认从环境变量 ANTHROPIC_MODEL 读取
             settings: 系统设置配置（预留，目前未使用）
         """
+        if not name or not name.strip():
+            raise ValueError("名称不能为空")
+
         self.model = model or DEFAULT_MODEL
-        self.name = "总结助手"
+        self.name = name
+        self.system_prompt = system_prompt
 
         # 显式读取 API key 并传递给客户端
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -59,34 +67,7 @@ class SummarizerAgent:
         else:
             self.client = AsyncAnthropic(api_key=api_key)
 
-        # 系统提示词
-        self.system_prompt = self._get_system_prompt()
-
-        logger.info(f"总结智能体初始化完成, 模型: {self.model}")
-
-    def _get_system_prompt(self) -> str:
-        """获取系统提示词"""
-        return (
-            "你是一个专业的对话总结助手。你的任务是对两个智能体"
-            "（支持者和挑战者）的对话进行准确、简洁的总结。\n\n"
-            "## 总结要求\n\n"
-            "1. **核心观点总结**：提取支持者的主要论点和立场\n"
-            "2. **反对观点总结**：提取挑战者的主要质疑和反例\n"
-            "3. **关键共识点**：双方达成一致的地方\n"
-            "4. **主要分歧点**：双方仍有争议的地方\n\n"
-            "## 格式要求\n\n"
-            "- 使用简洁、清晰的语言\n"
-            "- 总结不超过 300 字\n"
-            "- 使用项目符号列表组织内容\n"
-            "- 客观中立，不偏袒任何一方\n"
-            "- 使用标准的 markdown 格式\n\n"
-            "## 注意事项\n\n"
-            "- 只基于提供的对话内容进行总结\n"
-            "- 不要添加对话中没有的信息\n"
-            "- 不要进行搜索或查询外部信息\n"
-            "- 专注于提炼核心内容，避免冗余\n\n"
-            "请直接输出总结内容，不要添加任何前缀或开场白。"
-        )
+        logger.info(f"总结智能体初始化完成: {self.name}, 模型: {self.model}")
 
     async def summarize(
         self, messages: list[MessageParam], topic: str, interrupt: asyncio.Event
