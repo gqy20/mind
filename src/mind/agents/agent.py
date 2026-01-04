@@ -38,6 +38,7 @@ class Agent:
         tool_agent: Any = None,
         settings: SettingsConfig | None = None,
         stop_tokens: list[str] | None = None,
+        sdk_client: Any = None,
     ):
         """初始化智能体
 
@@ -48,6 +49,7 @@ class Agent:
             tool_agent: 可选的工具智能体（向后兼容）
             settings: 可选的设置配置（向后兼容）
             stop_tokens: 停止序列列表
+            sdk_client: 可选的 SDK 客户端（用于 MCP 工具）
         """
         if not name or not name.strip():
             raise ValueError("名称不能为空")
@@ -55,6 +57,7 @@ class Agent:
         self.name = name
         self.model = model or DEFAULT_MODEL
         self.tool_agent = tool_agent
+        self.sdk_client = sdk_client
 
         # 优先使用传入的 stop_tokens，否则从 settings 读取
         if stop_tokens is not None:

@@ -169,7 +169,8 @@ class ConversationManager:
     def _setup_sdk_tools(self, settings: SettingsConfig) -> None:
         """设置 SDK 工具（使用 SDK 原生的 mcp_servers 和 hooks 配置）
 
-        将配置中的 MCP 服务器和 Hook 设置转换为 SDK 格式。
+        将配置中的 MCP 服务器和 Hook 设置转换为 SDK 格式，
+        并将 SDK 客户端传递给智能体。
 
         Args:
             settings: 系统设置配置
@@ -210,6 +211,11 @@ class ConversationManager:
 
         # 创建 SDK 客户端（存储但不自动连接）
         self._sdk_client = ClaudeSDKClient(options=options)
+
+        # 将 SDK 客户端传递给两个智能体
+        self.agent_a.sdk_client = self._sdk_client
+        self.agent_b.sdk_client = self._sdk_client
+
         logger.info(
             f"SDK 工具已设置: {len(mcp_servers)} 个 MCP 服务器, "
             f"{len(hooks)} 个 Hook 配置"
