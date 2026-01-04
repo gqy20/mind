@@ -21,16 +21,26 @@ class TestConversationEndConfig:
     """测试对话结束配置类"""
 
     def test_default_config(self):
-        """测试：默认配置值"""
+        """测试：默认配置值（智能分析已启用）"""
         # Arrange & Act
         config = ConversationEndConfig()
 
-        # Assert
+        # Assert - 智能分析默认启用
         assert config.enable_detection is True
         assert config.end_marker == "<!-- END -->"
-        assert config.require_confirmation is True
-        assert config.auto_end is False
-        assert config.min_turns_before_end == 20  # 默认至少 20 轮
+        assert config.enable_analysis_detection is True  # 默认启用
+        assert config.min_turns_before_end == 20
+
+    def test_analysis_detection_enabled_by_default(self):
+        """测试：智能分析检测默认启用"""
+        # Arrange & Act
+        config = ConversationEndConfig()
+
+        # Assert - 智能分析相关配置的默认值
+        assert config.enable_analysis_detection is True
+        assert config.analysis_min_turns == 20
+        assert config.analysis_min_response_length == 30
+        assert config.analysis_check_turns == 5
 
     def test_custom_min_turns(self):
         """测试：自定义最小轮数"""
@@ -56,38 +66,32 @@ class TestConversationEndConfig:
         # Assert
         assert config.enable_detection is False
 
-    def test_auto_end_without_confirmation(self):
-        """测试：自动结束无需确认"""
-        # Arrange & Act
-        config = ConversationEndConfig(require_confirmation=False, auto_end=True)
-
-        # Assert
-        assert config.require_confirmation is False
-        assert config.auto_end is True
-
 
 class TestConversationEndDetector:
-    """测试对话结束检测器"""
+    """测试对话结束检测器（基础功能测试）
+
+    新的验证机制：显式标记必须有智能分析验证（需要 messages 参数）。
+    这些测试验证新机制的行为。
+    """
 
     @pytest.fixture
     def detector(self):
-        """创建检测器实例（无轮数限制）"""
-        # 使用 min_turns_before_end=0 以便旧测试不需要关心轮次
-        config = ConversationEndConfig(min_turns_before_end=0)
+        """创建检测器实例（无轮数限制，智能分析启用）"""
+        config = ConversationEndConfig(
+            min_turns_before_end=0, enable_analysis_detection=True
+        )
         return ConversationEndDetector(config)
 
-    def test_detect_explicit_end_marker(self, detector):
-        """测试：检测显式结束标记"""
+    def test_marker_requires_messages_for_verification(self, detector):
+        """测试：显式标记需要 messages 参数进行验证"""
         # Arrange
         response = "这是一个很好的观点。\n\n<!-- END -->"
 
-        # Act
+        # Act - 不提供 messages
         result = detector.detect(response)
 
-        # Assert
-        assert result.detected is True
-        assert result.method == "marker"
-        assert result.reason == "检测到显式结束标记"
+        # Assert - 标记被忽略（没有 messages 无法验证）
+        assert result.detected is False
 
     def test_no_end_marker_in_normal_response(self, detector):
         """测试：正常响应中无结束标记"""
@@ -137,28 +141,28 @@ class TestConversationEndDetector:
         assert cleaned == response
 
     def test_custom_end_marker_detection(self):
-        """测试：自定义结束标记检测"""
+        """测试：自定义结束标记检测（需要 messages 验证）"""
         # Arrange
         config = ConversationEndConfig(end_marker="::END::", min_turns_before_end=0)
         detector = ConversationEndDetector(config)
         response = "对话结束 ::END::"
 
-        # Act
+        # Act - 不提供 messages
         result = detector.detect(response)
 
-        # Assert
-        assert result.detected is True
+        # Assert - 标记被忽略（没有 messages 无法验证）
+        assert result.detected is False
 
     def test_marker_at_end_only(self, detector):
-        """测试：只有末尾的标记才被检测"""
+        """测试：显式标记需要 messages 验证"""
         # Arrange - 标记在中间
         response = "<!-- END --> 还有更多内容"
 
-        # Act
+        # Act - 不提供 messages
         result = detector.detect(response)
 
-        # Assert - 应该检测到（简单实现不检查位置）
-        assert result.detected is True
+        # Assert - 标记被忽略（没有 messages 无法验证）
+        assert result.detected is False
 
     def test_end_marker_ignored_when_turn_count_too_low(self):
         """测试：轮次不足时，结束标记被忽略"""
@@ -174,43 +178,43 @@ class TestConversationEndDetector:
         assert result.detected is False
 
     def test_end_marker_detected_when_turn_count_sufficient(self):
-        """测试：轮次足够时，结束标记被检测"""
+        """测试：轮次足够但没有 messages 时，结束标记被忽略"""
         # Arrange
         config = ConversationEndConfig(min_turns_before_end=20)
         detector = ConversationEndDetector(config)
         response = "可以结束了。\n\n<!-- END -->"
 
-        # Act - 第 20 轮
+        # Act - 第 20 轮，但没有 messages
         result = detector.detect(response, current_turn=20)
 
-        # Assert - 应该检测到（轮次足够）
-        assert result.detected is True
+        # Assert - 标记被忽略（没有 messages 无法进行智能分析验证）
+        assert result.detected is False
 
     def test_end_marker_detected_after_min_turns(self):
-        """测试：超过最小轮数后，结束标记被检测"""
+        """测试：超过最小轮数但没有 messages 时，结束标记被忽略"""
         # Arrange
         config = ConversationEndConfig(min_turns_before_end=20)
         detector = ConversationEndDetector(config)
         response = "达成共识。\n\n<!-- END -->"
 
-        # Act - 第 25 轮
+        # Act - 第 25 轮，但没有 messages
         result = detector.detect(response, current_turn=25)
 
-        # Assert - 应该检测到
-        assert result.detected is True
+        # Assert - 标记被忽略（没有 messages 无法进行智能分析验证）
+        assert result.detected is False
 
     def test_turn_count_edge_case_exactly_min_turns(self):
-        """测试：边界情况 - 刚好等于最小轮数"""
+        """测试：边界情况 - 刚好等于最小轮数但没有 messages"""
         # Arrange
         config = ConversationEndConfig(min_turns_before_end=20)
         detector = ConversationEndDetector(config)
         response = "对话完成。<!-- END -->"
 
-        # Act - 第 20 轮（刚好等于最小值）
+        # Act - 第 20 轮（刚好等于最小值），但没有 messages
         result = detector.detect(response, current_turn=20)
 
-        # Assert - 应该检测到
-        assert result.detected is True
+        # Assert - 标记被忽略（没有 messages 无法进行智能分析验证）
+        assert result.detected is False
 
     def test_turn_count_edge_case_one_below_min_turns(self):
         """测试：边界情况 - 少一轮"""
@@ -236,6 +240,236 @@ class TestConversationEndDetector:
         result = detector.detect(response)
 
         # Assert - 不应该检测到（0 < 20）
+        assert result.detected is False
+
+
+class TestConversationEndDetectorAnalysis:
+    """测试对话结束检测器的智能分析功能"""
+
+    @pytest.fixture
+    def detector_with_analysis(self):
+        """创建启用智能分析的检测器"""
+        config = ConversationEndConfig(
+            min_turns_before_end=0,
+            enable_analysis_detection=True,
+            analysis_min_turns=5,
+            analysis_min_response_length=20,
+            analysis_check_turns=3,
+        )
+        return ConversationEndDetector(config)
+
+    def test_analysis_detection_when_responses_repeat(self, detector_with_analysis):
+        """测试：当响应重复时，智能分析检测到结束"""
+        # Arrange - 构造重复的对话历史（响应长度 >= 20 字符）
+        long_response = "我完全同意这个观点，这是一个非常好的论述，值得深入探讨。"
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次标记 支持者"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次标记 挑战者"},
+            {"role": "assistant", "content": long_response},
+        ]
+        response = long_response
+
+        # Act - 调用 detect 并传入 messages
+        result = detector_with_analysis.detect(
+            response, current_turn=6, messages=messages
+        )
+
+        # Assert - 应该检测到循环
+        assert result.detected is True
+        assert result.method == "analysis"
+        assert "循环" in result.reason.lower()
+
+    def test_analysis_detection_when_turn_count_insufficient(
+        self, detector_with_analysis
+    ):
+        """测试：轮次不足时，智能分析不触发"""
+        # Arrange
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": "响应1"},
+        ]
+        response = "响应1"
+
+        # Act - 第 2 轮，不足最小轮数 5
+        result = detector_with_analysis.detect(
+            response, current_turn=2, messages=messages
+        )
+
+        # Assert - 不应该检测到
+        assert result.detected is False
+
+    def test_analysis_detection_when_response_too_short(self, detector_with_analysis):
+        """测试：响应过短时，智能分析不触发"""
+        # Arrange - 轮次足够但响应太短
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": "好的"},
+            {"role": "user", "content": "轮次2"},
+            {"role": "assistant", "content": "可以"},
+            {"role": "user", "content": "轮次3"},
+            {"role": "assistant", "content": "行"},
+        ]
+        response = "行"  # 少于 20 字符
+
+        # Act - 第 6 轮，但响应太短
+        result = detector_with_analysis.detect(
+            response, current_turn=6, messages=messages
+        )
+
+        # Assert - 不应该检测到
+        assert result.detected is False
+
+    def test_analysis_detection_disabled_when_flag_false(self):
+        """测试：禁用智能分析时不触发"""
+        # Arrange - 禁用智能分析
+        config = ConversationEndConfig(
+            min_turns_before_end=0,
+            enable_analysis_detection=False,
+        )
+        detector = ConversationEndDetector(config)
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": "重复响应"},
+            {"role": "user", "content": "轮次2"},
+            {"role": "assistant", "content": "重复响应"},
+            {"role": "user", "content": "轮次3"},
+            {"role": "assistant", "content": "重复响应"},
+        ]
+        response = "重复响应"
+
+        # Act
+        result = detector.detect(response, current_turn=6, messages=messages)
+
+        # Assert - 不应该检测到（智能分析已禁用）
+        assert result.detected is False
+
+    def test_explicit_marker_takes_priority_over_analysis(self, detector_with_analysis):
+        """测试：显式标记需要智能分析验证（更新为两层验证机制）"""
+        # Arrange - 有显式标记 + 智能分析验证通过（有循环）
+        long_response = "我完全同意这个观点，这是一个非常好的论述。"
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次2"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次3"},
+            {"role": "assistant", "content": long_response},
+        ]
+        response = f"讨论完毕 {long_response}<!-- END -->"
+
+        # Act
+        result = detector_with_analysis.detect(
+            response, current_turn=6, messages=messages
+        )
+
+        # Assert - 应该检测到（显式标记 + 智能分析验证通过）
+        assert result.detected is True
+        assert result.method == "marker_verified"
+        assert "循环" in result.reason.lower()
+
+    def test_analysis_normal_conversation_no_detection(self, detector_with_analysis):
+        """测试：正常对话（不重复）不会被误判为结束"""
+        # Arrange - 正常的不同响应
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": "观点1很有启发性"},
+            {"role": "user", "content": "轮次2"},
+            {"role": "assistant", "content": "观点2补充了一些细节"},
+            {"role": "user", "content": "轮次3"},
+            {"role": "assistant", "content": "观点3提出了新的角度"},
+        ]
+        response = "观点3提出了新的角度"
+
+        # Act
+        result = detector_with_analysis.detect(
+            response, current_turn=6, messages=messages
+        )
+
+        # Assert - 不应该检测到
+        assert result.detected is False
+
+    def test_marker_requires_analysis_verification(self, detector_with_analysis):
+        """测试：显式标记需要智能分析验证（有循环时通过）"""
+        # Arrange - 有显式标记 + 响应重复（智能分析会检测到循环）
+        long_response = "我完全同意这个观点，这是一个非常好的论述，值得深入探讨。"
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次标记 支持者"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次标记 挑战者"},
+            {"role": "assistant", "content": long_response},
+        ]
+        response_with_marker = f"{long_response}\n\n<!-- END -->"
+
+        # Act - 检测显式标记（应触发智能分析验证）
+        result = detector_with_analysis.detect(
+            response_with_marker, current_turn=6, messages=messages
+        )
+
+        # Assert - 应该检测到（显式标记 + 智能分析验证通过）
+        assert result.detected is True
+        assert result.method == "marker_verified"
+        assert "循环" in result.reason.lower()
+
+    def test_marker_fails_analysis_verification(self, detector_with_analysis):
+        """测试：显式标记未通过智能分析验证（无循环时拒绝）"""
+        # Arrange - 有显式标记 + 正常对话（无循环）
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": "观点1很有启发性"},
+            {"role": "user", "content": "轮次2"},
+            {"role": "assistant", "content": "观点2补充了一些细节"},
+            {"role": "user", "content": "轮次3"},
+            {"role": "assistant", "content": "观点3提出了新的角度"},
+        ]
+        response_with_marker = "达成共识。<!-- END -->"
+
+        # Act - 检测显式标记（应触发智能分析验证）
+        result = detector_with_analysis.detect(
+            response_with_marker, current_turn=6, messages=messages
+        )
+
+        # Assert - 不应该检测到（智能分析验证未通过）
+        assert result.detected is False
+
+    def test_marker_without_analysis_ignored(self):
+        """测试：未启用智能分析时，显式标记被忽略（需要 messages）"""
+        # Arrange - 未启用智能分析
+        config = ConversationEndConfig(
+            min_turns_before_end=0,
+            enable_analysis_detection=False,  # 未启用
+        )
+        detector = ConversationEndDetector(config)
+        response = "可以结束。<!-- END -->"
+
+        # Act - 未提供 messages，智能分析未启用
+        result = detector.detect(response, current_turn=5)
+
+        # Assert - 显式标记应该被忽略（需要 messages 参数）
+        assert result.detected is False
+
+    def test_marker_insufficient_turns_even_with_analysis(self, detector_with_analysis):
+        """测试：轮次不足时，即使有显式标记也不检测"""
+        # Arrange
+        long_response = "我完全同意这个观点，这是一个非常好的论述，值得深入探讨。"
+        messages = [
+            {"role": "user", "content": "开始"},
+            {"role": "assistant", "content": long_response},
+            {"role": "user", "content": "轮次2"},
+            {"role": "assistant", "content": long_response},
+        ]
+        response_with_marker = f"{long_response}<!-- END -->"
+
+        # Act - 第 3 轮（低于 analysis_min_turns=5）
+        result = detector_with_analysis.detect(
+            response_with_marker, current_turn=3, messages=messages
+        )
+
+        # Assert - 不应该检测到（轮次不足）
         assert result.detected is False
 
 
@@ -289,63 +523,60 @@ class TestEndProposal:
 
 
 class TestIntegration:
-    """测试集成场景"""
+    """测试集成场景（基础功能测试）
+
+    新的验证机制：显式标记必须有智能分析验证（需要 messages 参数）。
+    """
 
     @pytest.fixture
     def detector(self):
-        """创建检测器实例（无轮数限制）"""
-        # 使用 min_turns_before_end=0 以便测试不需要关心轮次
-        config = ConversationEndConfig(min_turns_before_end=0)
+        """创建检测器实例（智能分析启用）"""
+        config = ConversationEndConfig(
+            min_turns_before_end=0, enable_analysis_detection=True
+        )
         return ConversationEndDetector(config)
 
-    def test_full_detection_workflow(self, detector):
-        """测试：完整的检测工作流"""
+    def test_full_detection_workflow_without_messages(self, detector):
+        """测试：没有 messages 时，标记被忽略"""
         # Arrange
         response = "经过深入讨论，我们有以下共识。\n\n<!-- END -->"
 
-        # Act - 检测
+        # Act - 检测（不提供 messages）
         result = detector.detect(response)
 
-        # Assert - 检测到标记
-        assert result.detected is True
+        # Assert - 标记被忽略（没有 messages 无法验证）
+        assert result.detected is False
 
-        # Act - 清理
+        # 清理功能仍然正常工作
         cleaned = detector.clean_response(response)
-
-        # Assert - 标记已移除
         assert "<!-- END -->" not in cleaned
         assert "经过深入讨论" in cleaned
 
-    def test_create_proposal_after_detection(self, detector):
-        """测试：检测后创建提议"""
+    def test_clean_response_still_works(self, detector):
+        """测试：清理响应功能不受影响"""
         # Arrange
         response = "可以结束了。\n\n<!-- END -->"
-        result = detector.detect(response)
 
         # Act
-        if result.detected:
-            proposal = EndProposal(
-                agent_name="智能体",
-                response_text=response,
-                response_clean=detector.clean_response(response),
-            )
+        cleaned = detector.clean_response(response)
 
-        # Assert
-        assert proposal.confirmed is False
-        assert proposal.response_clean == "可以结束了。"
+        # Assert - 清理功能正常工作
+        assert cleaned == "可以结束了。"
 
     @pytest.mark.parametrize(
         "response,expected_detected",
         [
             ("继续讨论", False),
-            ("让我们总结一下。<!-- END -->", True),
-            ("我同意，到此为止。<!-- END -->", True),
+            ("让我们总结一下。<!-- END -->", False),  # 无 messages，被忽略
+            ("我同意，到此为止。<!-- END -->", False),  # 无 messages，被忽略
             ("还有一点要补充", False),
-            ("<!-- END -->", True),  # 仅标记
+            ("<!-- END -->", False),  # 无 messages，被忽略
         ],
     )
-    def test_various_responses(self, detector, response, expected_detected):
-        """测试：各种响应的检测"""
+    def test_various_responses_without_messages(
+        self, detector, response, expected_detected
+    ):
+        """测试：各种响应的检测（无 messages）"""
         # Act
         result = detector.detect(response)
 

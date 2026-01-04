@@ -90,9 +90,7 @@ class ConversationManager:
     search_history: "SearchHistory | None" = field(default=None)
     # 对话结束检测器
     end_detector: ConversationEndDetector = field(
-        default_factory=lambda: ConversationEndDetector(
-            ConversationEndConfig(require_confirmation=True)
-        )
+        default_factory=lambda: ConversationEndDetector(ConversationEndConfig())
     )
     # 总结智能体（专门用于总结对话）
     summarizer_agent: "SummarizerAgent | None" = field(default=None)

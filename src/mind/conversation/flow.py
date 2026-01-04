@@ -177,8 +177,10 @@ class FlowController:
 
         output.append("")
 
-        # 检测对话结束标记
-        end_result = self.manager.end_detector.detect(response, current_turn=next_turn)
+        # 检测对话结束标记（传入 messages 用于智能分析）
+        end_result = self.manager.end_detector.detect(
+            response, current_turn=next_turn, messages=self.manager.messages
+        )
         if end_result.detected:
             logger.info(f"{agent.name} 请求结束对话（非交互式）")
             output.append("")
@@ -500,9 +502,9 @@ class FlowController:
             )
             console.print()  # 进度后换行
 
-            # 检测对话结束标记
+            # 检测对话结束标记（传入 messages 用于智能分析）
             end_result = self.manager.end_detector.detect(
-                response, current_turn=self.manager.turn
+                response, current_turn=self.manager.turn, messages=self.manager.messages
             )
             if end_result.detected:
                 logger.info(f"{current_agent.name} 请求结束对话")
