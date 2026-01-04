@@ -318,7 +318,7 @@ class ResponseHandler:
     ) -> str:
         """基于工具结果继续生成响应
 
-        支持处理继续生成时的工具调用。
+        继续生成时禁止工具调用，强制 AI 基于已有工具结果生成文本。
 
         Args:
             messages: 包含工具结果的对话历史
@@ -331,18 +331,20 @@ class ResponseHandler:
         response_text = ""
         has_text_delta = False  # 标记是否处理过 text_delta
         citations_buffer: list[dict] = []  # 捕获引用信息
-        tool_use_buffer: list[dict] = []  # 收集工具调用
 
         # 获取 documents 列表（用于 Citations API）
         docs_list = self.documents.documents if self.documents else None
 
         try:
+            # 继续生成时禁止工具调用，强制 AI 生成文本
+            # 使用 omit_tools=True 完全省略 tools 参数
             async for event in self.client.stream(
                 messages=messages,
                 system=system,
-                tools=_get_tools_schema(),
+                tools=None,  # 不传入工具，强制 AI 生成文本
                 documents=docs_list,
                 stop_tokens=self.stop_tokens,
+                omit_tools=True,  # 通过 omit_tools 参数明确禁止工具
             ):
                 if interrupt.is_set():
                     logger.debug(f"智能体 {self.name} 继续响应被中断")
@@ -363,15 +365,6 @@ class ResponseHandler:
                         event, response_text, has_text_delta
                     )
 
-                # 处理工具调用
-                elif event.type == "content_block_stop":
-                    tool_calls = self._extract_tool_calls(event)
-                    if tool_calls:
-                        logger.debug(
-                            f"继续生成时检测到工具调用: {tool_calls[0]['name']}"
-                        )
-                        tool_use_buffer.extend(tool_calls)
-
         except Exception as e:
             logger.exception(f"继续响应出错: {e}")
             return response_text
@@ -379,19 +372,6 @@ class ResponseHandler:
         # 显示引用列表（如果有）
         if citations_buffer:
             display_citations(citations_buffer)
-
-        # 检测工具调用
-        if tool_use_buffer:
-            tool_names = [tc.get("name", "") for tc in tool_use_buffer]
-            names_str = ", ".join(tool_names)
-            logger.warning(
-                f"继续生成时检测到 {len(tool_use_buffer)} 个工具调用 ({names_str})，"
-                f"忽略以避免搜索循环。AI 应在输出前完成所有搜索。"
-            )
-
-            # 方案 B：如果响应为空且有工具调用，触发重试机制
-            if not response_text:
-                return await self._retry_without_tools(messages, system, interrupt)
 
         return response_text
 
