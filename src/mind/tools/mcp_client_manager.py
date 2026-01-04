@@ -3,14 +3,58 @@
 使用 mcp 库连接到 MCP 服务器并获取可用工具列表。
 """
 
+import asyncio
+from contextlib import asynccontextmanager
 from typing import Any
 
 from mcp.client.session import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.stdio import StdioServerParameters
 
 from mind.logger import get_logger
 
 logger = get_logger("mind.mcp_client_manager")
+
+
+@asynccontextmanager
+async def _silent_stdio_client(
+    server_params: StdioServerParameters,
+):
+    """创建静默的 stdio 客户端（抑制服务器输出）
+
+    与标准 stdio_client 的区别在于将服务器的 stderr 重定向到 DEVNULL，
+    防止 FastMCP banner 等日志污染对话输出。
+
+    Args:
+        server_params: 服务器参数
+
+    Yields:
+        (read_stream, write_stream) 元组
+    """
+    # 创建子进程，将 stderr 重定向到 DEVNULL
+    process = await asyncio.create_subprocess_exec(
+        server_params.command,
+        *server_params.args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,  # 抑制服务器日志输出
+        env=server_params.env,
+    )
+
+    # 检查进程是否成功启动
+    if process.returncode is not None:
+        raise RuntimeError(f"Failed to start server process: {server_params.command}")
+
+    try:
+        yield process.stdout, process.stdin
+    finally:
+        # 确保进程被正确清理
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5.0)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
 
 
 class MCPClientManager:
@@ -50,8 +94,11 @@ class MCPClientManager:
                 env=server_config.get("env", None),
             )
 
-            # 连接到服务器（ClientSession 也需要作为上下文管理器）
-            async with stdio_client(params) as (read_stream, write_stream):
+            # 使用静默客户端连接服务器
+            async with _silent_stdio_client(params) as (
+                read_stream,
+                write_stream,
+            ):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
 
@@ -127,8 +174,11 @@ class MCPClientManager:
                 env=server_config.get("env", None),
             )
 
-            # 连接到服务器并调用工具
-            async with stdio_client(params) as (read_stream, write_stream):
+            # 使用静默客户端连接服务器并调用工具
+            async with _silent_stdio_client(params) as (
+                read_stream,
+                write_stream,
+            ):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
 
