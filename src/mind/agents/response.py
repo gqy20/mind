@@ -274,9 +274,9 @@ class ResponseHandler:
             logger.debug(f"工具调用检测完成，buffer 状态: {buffer_status}")
 
             if tool_use_buffer:
-                # 并行执行所有工具调用
+                # 并行执行所有工具调用，传递 system 参数
                 parallel_result = await self._execute_tools_parallel(
-                    tool_use_buffer, messages, interrupt
+                    tool_use_buffer, messages, system, interrupt
                 )
                 if parallel_result is not None:
                     response_text = parallel_result
@@ -464,6 +464,7 @@ class ResponseHandler:
         self,
         tool_calls: list[dict],
         messages: list["MessageParam"],
+        system: str,
         interrupt: asyncio.Event,
     ) -> str | None:
         """并行执行多个工具调用
@@ -471,6 +472,7 @@ class ResponseHandler:
         Args:
             tool_calls: 工具调用列表
             messages: 对话历史
+            system: 系统提示词
             interrupt: 中断事件
 
         Returns:
@@ -490,7 +492,9 @@ class ResponseHandler:
             """
             tool_name = tool_call.get("name", "")
             if tool_name == "search_web":
-                result = await self._execute_tool_search(tool_call, messages, interrupt)
+                result = await self._execute_tool_search(
+                    tool_call, messages, system, interrupt
+                )
                 return {"id": tool_call.get("id"), "result": result}
             else:
                 logger.warning(f"未知工具: {tool_name}")
@@ -545,13 +549,14 @@ class ResponseHandler:
             f"{len(tool_result_blocks)} 个 tool_result 到消息历史"
         )
 
-        # 基于工具结果继续生成
-        return await self._continue_response(messages, "", interrupt)
+        # 基于工具结果继续生成，传递 system 参数
+        return await self._continue_response(messages, system, interrupt)
 
     async def _execute_tool_search(
         self,
         tool_call: dict,
         messages: list["MessageParam"],
+        system: str,
         interrupt: asyncio.Event,
     ) -> str | None:
         """执行搜索工具调用
@@ -559,6 +564,7 @@ class ResponseHandler:
         Args:
             tool_call: 工具调用信息
             messages: 对话历史
+            system: 系统提示词
             interrupt: 中断事件
 
         Returns:
@@ -627,9 +633,9 @@ class ResponseHandler:
                     messages, tool_call, query, search_result_text
                 )
 
-                # 基于工具结果继续生成
+                # 基于工具结果继续生成，传递 system 参数
                 print(f"\n[{self.name}]: ", end="", flush=True)
-                return await self._continue_response(messages, "", interrupt)
+                return await self._continue_response(messages, system, interrupt)
 
             # 回退到原始流程（无 SearchHistory）
             from mind.tools.search_tool import search_web
@@ -642,9 +648,9 @@ class ResponseHandler:
             # 将搜索结果添加到消息历史
             self._append_tool_messages(messages, tool_call, query, search_result or "")
 
-            # 基于工具结果继续生成
+            # 基于工具结果继续生成，传递 system 参数
             print(f"\n[{self.name}]: ", end="", flush=True)
-            return await self._continue_response(messages, "", interrupt)
+            return await self._continue_response(messages, system, interrupt)
         else:
             print(" ⚠️ (无结果)")
             logger.warning("搜索未返回结果")

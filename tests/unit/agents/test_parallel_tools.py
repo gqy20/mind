@@ -87,7 +87,7 @@ async def test_parallel_tool_calls_execution():
     execution_order = []
     execution_times = []
 
-    async def mock_execute(tool_call, messages, interrupt):
+    async def mock_execute(tool_call, messages, system, interrupt):
         execution_order.append(tool_call["input"]["query"])
         execution_times.append(asyncio.get_event_loop().time())
         # 模拟搜索耗时
@@ -178,7 +178,7 @@ async def test_multiple_tool_results_in_message():
         return "基于搜索结果的响应"
 
     # Mock 搜索工具执行，返回模拟结果
-    async def mock_search(tool_call, messages, interrupt):
+    async def mock_search(tool_call, messages, system, interrupt):
         return f"搜索结果: {tool_call['input']['query']}"
 
     with (
@@ -279,7 +279,7 @@ async def test_parallel_tools_with_citations():
         return "搜索完成"
 
     # Mock 搜索工具执行
-    async def mock_search(tool_call, messages, interrupt):
+    async def mock_search(tool_call, messages, system, interrupt):
         return f"搜索结果: {tool_call['input']['query']}"
 
     with (

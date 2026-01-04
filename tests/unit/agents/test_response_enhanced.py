@@ -242,6 +242,7 @@ async def test_execute_tool_search():
         await handler._execute_tool_search(
             tool_call,
             messages=[],
+            system="test system",  # 添加 system 参数
             interrupt=asyncio.Event(),
         )
 
