@@ -88,13 +88,13 @@ class AnthropicClient:
         if not omit_tools:
             kwargs["tools"] = tools or []
 
-        # 只有在有 documents 时才添加该参数
-        if documents:
-            kwargs["documents"] = documents
-
         # 添加 stop_sequences（如果提供）
         if stop_tokens:
             kwargs["stop_sequences"] = stop_tokens
+
+        # documents 需要通过 extra_body 传递（Citations API）
+        if documents:
+            kwargs["extra_body"] = {"documents": documents}
 
         async with self.client.messages.stream(**kwargs) as stream:  # type: ignore[arg-type]
             async for event in stream:
