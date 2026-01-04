@@ -118,8 +118,9 @@ class ConversationManager:
             self.search_history = SearchHistory(file_path=history_path)
 
             # 为两个智能体设置同一个搜索历史实例
-            self.agent_a.search_history = self.search_history  # type: ignore[assignment]
-            self.agent_b.search_history = self.search_history  # type: ignore[assignment]
+            # 使用 set_search_history 方法同时更新 agent 和 response_handler
+            self.agent_a.set_search_history(self.search_history)
+            self.agent_b.set_search_history(self.search_history)
             logger.info(f"搜索历史已初始化: {history_path}")
 
         # 如果启用工具，为两个智能体设置共享的 ToolAgent
