@@ -621,10 +621,28 @@ class ResponseHandler:
                     for doc in citation_docs:
                         self.documents.add(doc)
 
-                # 构建工具结果消息（使用搜索结果的文本摘要）
-                search_result_text = (
-                    f"已搜索 '{query}'，找到 {len(raw_results)} 条结果。"
+                # 构建工具结果消息（包含完整的搜索结果内容）
+                # 这样 AI 可以引用具体的内容
+                result_lines = [f"**网络搜索结果**: {query}\n"]
+                result_lines.append(
+                    "请在回复时使用引用标记，例如：`根据研究[1]，...`\n"
                 )
+
+                for i, result in enumerate(raw_results, 1):
+                    title = result.get("title", "无标题")
+                    href = result.get("href", "")
+                    body = result.get("body", "")
+
+                    result_lines.append(f"[{i}] {title}")
+                    if href:
+                        result_lines.append(f"    来源: {href}")
+                    if body:
+                        # 限制摘要长度
+                        short_body = body[:150] + "..." if len(body) > 150 else body
+                        result_lines.append(f"    内容: {short_body}")
+                    result_lines.append("")
+
+                search_result_text = "\n".join(result_lines)
                 self._append_tool_messages(
                     messages, tool_call, query, search_result_text
                 )
