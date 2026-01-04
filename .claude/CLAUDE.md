@@ -113,10 +113,11 @@ src/mind/
 这是核心对话引擎，采用组件分离设计：
 
 **Agent 类** (`agents/agent.py`)：对外统一接口
-- `__init__(name, system_prompt, model, settings)`: 初始化
+- `__init__(name, system_prompt, model, settings, stop_tokens)`: 初始化
 - `respond(messages, interrupt)`: 生成响应（委托给 ResponseHandler）
 - `query_tool(question, messages)`: 分析对话上下文（委托给 ConversationAnalyzer）
 - `add_document(doc)`: 添加文档到池（委托给 DocumentPool）
+- `stop_tokens`: 停止序列（默认 `["<thinking>", "</thinking>"]`），通过 API 的 `stop_sequences` 参数传递
 
 **ConversationAnalyzer** (`agents/conversation_analyzer.py`)：对话分析
 - `analyze_context(messages, question)`: 分析对话上下文回答问题
@@ -213,6 +214,8 @@ agents:
       多行提示词...
 
 settings:
+  # 停止序列 - 遇到这些标记时停止生成
+  stop_tokens: ["<thinking>", "</thinking>"]
   search: { max_results, history_limit }
   documents: { max_documents, ttl }
   conversation: { turn_interval, max_turns }
@@ -419,6 +422,13 @@ settings:
 - `ResponseHandler` 捕获 `citations_delta` 事件
 - 引用信息通过 `SearchHistory` 自动持久化
 - 引用显示功能在 `display/citations.py` 中实现
+
+### Stop Tokens（停止序列）功能
+- **配置位置**: `prompts.yaml` 的 `settings.stop_tokens`
+- **默认值**: `["<thinking>", "</thinking>"]`
+- **传递链路**: `SettingsConfig` → `AgentFactory` → `Agent` → `ResponseHandler` → `AnthropicClient.stream()` → API `stop_sequences`
+- **作用**: 当 AI 生成内容遇到这些标记时，API 会停止生成，防止 `<thinking>` 标签内容出现在响应中
+- **测试**: `tests/unit/agents/test_client_stop_tokens.py`
 
 ## Pre-commit 钩子
 

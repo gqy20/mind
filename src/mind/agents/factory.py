@@ -45,6 +45,7 @@ class AgentFactory:
             name=config.name,
             system_prompt=config.system_prompt,
             settings=self.settings,
+            stop_tokens=self.settings.stop_tokens,
         )
         logger.info(f"对话智能体创建完成: {agent.name}")
         return agent
@@ -68,6 +69,7 @@ class AgentFactory:
                 name=config.name,
                 system_prompt=config.system_prompt,
                 settings=self.settings,
+                stop_tokens=self.settings.stop_tokens,
             )
             logger.info(f"对话智能体创建完成: {agents[agent_id].name}")
 

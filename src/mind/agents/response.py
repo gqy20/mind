@@ -45,6 +45,7 @@ class ResponseHandler:
         search_config: SearchConfig | None = None,
         name: str = "Agent",
         documents=None,
+        stop_tokens: list[str] | None = None,
     ):
         """初始化响应处理器
 
@@ -54,12 +55,14 @@ class ResponseHandler:
             search_config: 搜索配置
             name: 智能体名称（用于日志）
             documents: 可选的文档池，用于存储搜索结果
+            stop_tokens: 停止序列列表
         """
         self.client = client
         self.search_history = search_history
         self.search_config = search_config or SearchConfig()
         self.name = name
         self.documents = documents
+        self.stop_tokens = stop_tokens
 
     def _handle_content_block_delta(
         self, event, response_text: str, has_text_delta: bool
@@ -232,6 +235,7 @@ class ResponseHandler:
                 system=system,
                 tools=_get_tools_schema(),
                 documents=docs_list,
+                stop_tokens=self.stop_tokens,
             ):
                 if interrupt.is_set():
                     logger.debug(f"智能体 {self.name} 响应中途被中断")
@@ -338,6 +342,7 @@ class ResponseHandler:
                 system=system,
                 tools=_get_tools_schema(),
                 documents=docs_list,
+                stop_tokens=self.stop_tokens,
             ):
                 if interrupt.is_set():
                     logger.debug(f"智能体 {self.name} 继续响应被中断")

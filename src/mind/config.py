@@ -76,6 +76,10 @@ class SettingsConfig(BaseModel):
     documents: DocumentsConfig = Field(default_factory=DocumentsConfig)
     conversation: ConversationConfig = Field(default_factory=ConversationConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    stop_tokens: list[str] = Field(
+        default_factory=lambda: ["<thinking>", "</thinking>"],
+        description="停止序列，遇到这些标记时停止生成",
+    )
 
 
 class ConfigError(ValueError):

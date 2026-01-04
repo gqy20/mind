@@ -35,6 +35,7 @@ class Agent:
         model: str | None = None,
         tool_agent: Any = None,
         settings: SettingsConfig | None = None,
+        stop_tokens: list[str] | None = None,
     ):
         """初始化智能体
 
@@ -44,6 +45,7 @@ class Agent:
             model: 使用的模型，默认从环境变量 ANTHROPIC_MODEL 读取
             tool_agent: 可选的工具智能体（向后兼容）
             settings: 可选的设置配置（向后兼容）
+            stop_tokens: 停止序列列表
         """
         if not name or not name.strip():
             raise ValueError("名称不能为空")
@@ -51,6 +53,7 @@ class Agent:
         self.name = name
         self.model = model or DEFAULT_MODEL
         self.tool_agent = tool_agent
+        self.stop_tokens = stop_tokens
 
         # 从配置中读取设置
         if settings:
@@ -85,6 +88,7 @@ class Agent:
             search_config=search_config,
             name=self.name,
             documents=self.documents,
+            stop_tokens=self.stop_tokens,
         )
 
         # 对话分析器
