@@ -193,7 +193,7 @@ async def main():
     )
 
     # 设置 SDK 工具（MCP 服务器和 Hooks）
-    manager._setup_sdk_tools(settings)
+    await manager._setup_sdk_tools(settings)
     logger.info("SDK 工具设置完成")
 
     # 获取主题

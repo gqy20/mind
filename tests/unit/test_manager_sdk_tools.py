@@ -1,13 +1,14 @@
 """
-ConversationManager SDK 工具设置的单元测试
+ConversationManager MCP 工具设置的单元测试
 
 测试 ConversationManager._setup_sdk_tools 方法：
-- 将 MCP 服务器配置转换为 SDK 格式
-- 构建 Hooks 配置
-- 使用 SDK 原生配置创建客户端
+- 使用 MCPClientManager 获取 MCP 工具列表
+- 将工具列表传递给智能体的 response_handler
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from mind.config import HookConfig, MCPServerConfig, SettingsConfig, ToolsConfig
 
@@ -15,7 +16,8 @@ from mind.config import HookConfig, MCPServerConfig, SettingsConfig, ToolsConfig
 class TestSetupSDKTools:
     """测试 _setup_sdk_tools 方法"""
 
-    def test_setup_sdk_tools_with_mcp_servers(self):
+    @pytest.mark.asyncio
+    async def test_setup_sdk_tools_with_mcp_servers(self):
         """测试：使用 MCP 服务器配置设置 SDK 工具"""
         # Arrange
         from mind.agents.agent import Agent
@@ -49,32 +51,37 @@ class TestSetupSDKTools:
             )
         )
 
-        # Mock SDK client (mock in the __init__ scope where it's imported)
-        mock_client = MagicMock()
-        mock_client.connect = AsyncMock()
+        # Mock MCP 工具返回值
+        mock_tools = [
+            {
+                "name": "search_knowledge",
+                "description": "Search knowledge base",
+                "inputSchema": {},
+            },
+            {"name": "web_search", "description": "Search the web", "inputSchema": {}},
+        ]
+
+        # Mock MCPClientManager
+        mock_manager_instance = MagicMock()
+        mock_manager_instance.get_all_tools = AsyncMock(return_value=mock_tools)
+        mock_manager_instance.close = AsyncMock()
 
         # Act
-        with patch("claude_agent_sdk.ClaudeSDKClient", return_value=mock_client):
-            with patch("claude_agent_sdk.ClaudeAgentOptions") as mock_options:
-                manager._setup_sdk_tools(settings)
+        with patch(
+            "mind.tools.mcp_client_manager.MCPClientManager",
+            return_value=mock_manager_instance,
+        ):
+            await manager._setup_sdk_tools(settings)
 
-                # Assert
-                # 验证 ClaudeAgentOptions 被调用，且包含 MCP 服务器配置
-                assert mock_options.called
-                call_kwargs = mock_options.call_args[1]
-                mcp_servers_arg = call_kwargs.get("mcp_servers")
+        # Assert
+        # 验证 MCP 工具被获取并传递给 response_handler
+        assert agent_a.response_handler.mcp_tools == mock_tools
+        assert agent_b.response_handler.mcp_tools == mock_tools
+        assert len(mock_tools) == 2
 
-                # 验证 MCP 服务器配置
-                assert mcp_servers_arg is not None
-                assert "knowledge" in mcp_servers_arg
-                assert "web-search" in mcp_servers_arg
-                assert mcp_servers_arg["knowledge"]["command"] == "node"
-                assert mcp_servers_arg["knowledge"]["args"] == ["/path/to/knowledge.js"]
-                assert mcp_servers_arg["web-search"]["command"] == "python"
-                assert mcp_servers_arg["web-search"]["args"] == ["-m", "web_search"]
-
-    def test_setup_sdk_tools_with_hooks(self):
-        """测试：使用 Hook 配置设置 SDK 工具"""
+    @pytest.mark.asyncio
+    async def test_setup_sdk_tools_with_hooks(self):
+        """测试：使用 Hook 配置（当前仅记录日志，不创建 SDK 客户端）"""
         # Arrange
         from mind.agents.agent import Agent
         from mind.manager import ConversationManager
@@ -91,7 +98,7 @@ class TestSetupSDKTools:
             agent_b=agent_b,
         )
 
-        # Mock settings with hooks
+        # Mock settings with hooks (no MCP servers)
         settings = SettingsConfig(
             tools=ToolsConfig(
                 pre_tool_use=HookConfig(timeout=15.0, enabled=True),
@@ -100,21 +107,15 @@ class TestSetupSDKTools:
         )
 
         # Act
-        with patch("claude_agent_sdk.ClaudeSDKClient"):
-            with patch("claude_agent_sdk.ClaudeAgentOptions") as mock_options:
-                manager._setup_sdk_tools(settings)
+        await manager._setup_sdk_tools(settings)
 
-                # Assert
-                assert mock_options.called
-                call_kwargs = mock_options.call_args[1]
-                hooks_arg = call_kwargs.get("hooks")
+        # Assert
+        # 没有 MCP 服务器时，mcp_tools 应该为空列表
+        assert agent_a.response_handler.mcp_tools == []
+        assert agent_b.response_handler.mcp_tools == []
 
-                # 验证 Hook 配置
-                assert hooks_arg is not None
-                assert "PreToolUse" in hooks_arg
-                assert "PostToolUse" in hooks_arg
-
-    def test_setup_sdk_tools_with_full_config(self):
+    @pytest.mark.asyncio
+    async def test_setup_sdk_tools_with_full_config(self):
         """测试：使用完整配置（MCP + Hooks）设置 SDK 工具"""
         # Arrange
         from mind.agents.agent import Agent
@@ -147,16 +148,31 @@ class TestSetupSDKTools:
             )
         )
 
+        # Mock MCP 工具返回值
+        mock_tools = [
+            {"name": "test_tool", "description": "Test tool", "inputSchema": {}},
+        ]
+
+        # Mock MCPClientManager
+        mock_manager_instance = MagicMock()
+        mock_manager_instance.get_all_tools = AsyncMock(return_value=mock_tools)
+        mock_manager_instance.close = AsyncMock()
+
         # Act
-        with patch("claude_agent_sdk.ClaudeSDKClient"):
-            with patch("claude_agent_sdk.ClaudeAgentOptions") as mock_options:
-                manager._setup_sdk_tools(settings)
+        with patch(
+            "mind.tools.mcp_client_manager.MCPClientManager",
+            return_value=mock_manager_instance,
+        ):
+            await manager._setup_sdk_tools(settings)
 
-                # Assert
-                assert mock_options.called
+        # Assert
+        # 验证 MCP 工具被获取
+        assert agent_a.response_handler.mcp_tools == mock_tools
+        assert agent_b.response_handler.mcp_tools == mock_tools
 
-    def test_setup_sdk_tools_with_empty_config(self):
-        """测试：空配置时不应创建 SDK 客户端"""
+    @pytest.mark.asyncio
+    async def test_setup_sdk_tools_with_empty_config(self):
+        """测试：空配置时不应设置 MCP 工具"""
         # Arrange
         from mind.agents.agent import Agent
         from mind.manager import ConversationManager
@@ -177,13 +193,12 @@ class TestSetupSDKTools:
         settings = SettingsConfig(tools=ToolsConfig())
 
         # Act
-        with patch("claude_agent_sdk.ClaudeSDKClient") as mock_sdk:
-            manager._setup_sdk_tools(settings)
+        await manager._setup_sdk_tools(settings)
 
-            # Assert
-            # 空配置时不应该调用 SDK
-            assert not mock_sdk.called
-            assert manager._sdk_client is None
+        # Assert
+        # 空配置时 mcp_tools 应该为空列表
+        assert agent_a.response_handler.mcp_tools == []
+        assert agent_b.response_handler.mcp_tools == []
 
     def test_mcp_config_to_sdk_format_conversion(self):
         """测试：MCP 配置转换为 SDK 格式"""

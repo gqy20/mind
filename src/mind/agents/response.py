@@ -5,7 +5,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from anthropic import APIStatusError
 from anthropic.types import ToolParam
@@ -46,7 +46,7 @@ class ResponseHandler:
         name: str = "Agent",
         documents=None,
         stop_tokens: list[str] | None = None,
-        sdk_client: Any = None,
+        mcp_tools: list[dict] | None = None,
     ):
         """初始化响应处理器
 
@@ -57,7 +57,7 @@ class ResponseHandler:
             name: 智能体名称（用于日志）
             documents: 可选的文档池，用于存储搜索结果
             stop_tokens: 停止序列列表
-            sdk_client: 可选的 SDK 客户端（用于 MCP 工具）
+            mcp_tools: 可选的 MCP 工具列表
         """
         self.client = client
         self.search_history = search_history
@@ -65,7 +65,7 @@ class ResponseHandler:
         self.name = name
         self.documents = documents
         self.stop_tokens = stop_tokens
-        self.sdk_client = sdk_client
+        self.mcp_tools = mcp_tools or []
 
     def _handle_content_block_delta(
         self, event, response_text: str, has_text_delta: bool
@@ -236,7 +236,7 @@ class ResponseHandler:
             async for event in self.client.stream(
                 messages=messages,
                 system=system,
-                tools=_get_tools_schema(self.sdk_client),
+                tools=_get_tools_schema(self.mcp_tools),
                 documents=docs_list,
                 stop_tokens=self.stop_tokens,
             ):
@@ -704,11 +704,11 @@ class ResponseHandler:
         console.print(f"\n[red]❌ 网络错误：{e}[/red]")
 
 
-def _get_tools_schema(sdk_client: Any = None) -> list[ToolParam]:
+def _get_tools_schema(mcp_tools: list[dict] | None = None) -> list[ToolParam]:
     """获取可用工具的 schema 定义
 
     Args:
-        sdk_client: 可选的 SDK 客户端，用于获取 MCP 工具
+        mcp_tools: 可选的 MCP 工具列表
 
     Returns:
         工具 schema 列表
@@ -731,20 +731,15 @@ def _get_tools_schema(sdk_client: Any = None) -> list[ToolParam]:
         )
     ]
 
-    # 如果提供了 SDK 客户端，尝试获取 MCP 工具
-    if sdk_client and hasattr(sdk_client, "get_tools"):
-        try:
-            mcp_tools = sdk_client.get_tools()
-            for tool in mcp_tools:
-                # 转换 MCP 工具格式为 ToolParam
-                tools.append(
-                    ToolParam(
-                        name=tool.get("name", "unknown"),
-                        description=tool.get("description", ""),
-                        input_schema=tool.get("inputSchema", {}),
-                    )
+    # 添加 MCP 工具
+    if mcp_tools:
+        for tool in mcp_tools:
+            tools.append(
+                ToolParam(
+                    name=tool.get("name", "unknown"),
+                    description=tool.get("description", ""),
+                    input_schema=tool.get("inputSchema", {}),
                 )
-        except Exception as e:
-            logger.warning(f"获取 MCP 工具失败: {e}")
+            )
 
     return tools

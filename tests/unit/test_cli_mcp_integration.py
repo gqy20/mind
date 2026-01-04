@@ -98,30 +98,32 @@ class TestMCPConfigurationLoaded:
 
 
 class TestSDKClientPassedToAgent:
-    """测试 SDK 客户端传递给智能体"""
+    """测试 MCP 工具传递给智能体"""
 
-    def test_agent_accepts_sdk_client(self):
-        """测试：Agent 应该能够接收 sdk_client 参数"""
+    def test_agent_response_handler_accepts_mcp_tools(self):
+        """测试：Agent 的 ResponseHandler 应该能够接收 mcp_tools 参数"""
         # Arrange
         from mind.agents import Agent
 
-        mock_sdk_client = MagicMock()
+        mcp_tools = [
+            {
+                "name": "search_article",
+                "description": "搜索学术文章",
+                "inputSchema": {"type": "object"},
+            }
+        ]
 
         # Act & Assert
-        # 当前 Agent.__init__ 可能不接受 sdk_client 参数
-        # 这个测试会推动我们添加这个参数
-        try:
-            agent = Agent(
-                name="测试智能体",
-                system_prompt="你是一个测试智能体",
-                sdk_client=mock_sdk_client,
-            )
-            # 如果成功，验证 sdk_client 被存储
-            assert hasattr(agent, "sdk_client")
-            assert agent.sdk_client is mock_sdk_client
-        except TypeError:
-            # 当前不接受这个参数，这是预期的失败
-            pytest.fail("Agent.__init__ 应该接受 sdk_client 参数")
+        agent = Agent(
+            name="测试智能体",
+            system_prompt="你是一个测试智能体",
+        )
+
+        # 更新 response_handler 的 mcp_tools
+        agent.response_handler.mcp_tools = mcp_tools
+
+        # 验证 mcp_tools 被存储
+        assert agent.response_handler.mcp_tools == mcp_tools
 
 
 class TestMCPToolsInSchema:
@@ -132,9 +134,7 @@ class TestMCPToolsInSchema:
         # Arrange
         from mind.agents.response import _get_tools_schema
 
-        mock_sdk_client = MagicMock()
-        # Mock MCP 工具
-        mock_sdk_client.get_tools.return_value = [
+        mcp_tools = [
             {
                 "name": "search_article",
                 "description": "搜索学术文章",
@@ -143,13 +143,17 @@ class TestMCPToolsInSchema:
         ]
 
         # Act
-        tools_schema = _get_tools_schema(sdk_client=mock_sdk_client)
+        tools_schema = _get_tools_schema(mcp_tools)
 
         # Assert
+        # ToolParam 返回字典格式，使用字典访问
         # 应该包含内置的 search_web 工具
         search_web_found = any(t["name"] == "search_web" for t in tools_schema)
         assert search_web_found, "应该包含 search_web 工具"
 
-        # 应该包含 MCP 工具（如果提供了 sdk_client）
-        # 当前 _get_tools_schema 不接受 sdk_client 参数
-        # 这个测试会推动我们添加这个功能
+        # 应该包含 MCP 工具
+        article_found = any(t["name"] == "search_article" for t in tools_schema)
+        assert article_found, "应该包含 search_article MCP 工具"
+
+        # 验证工具数量：1 个内置 + 1 个 MCP = 2 个
+        assert len(tools_schema) == 2

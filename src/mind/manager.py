@@ -166,11 +166,11 @@ class ConversationManager:
             self._flow_controller = FlowController(self)
         return self._flow_controller
 
-    def _setup_sdk_tools(self, settings: SettingsConfig) -> None:
+    async def _setup_sdk_tools(self, settings: SettingsConfig) -> None:
         """设置 SDK 工具（使用 SDK 原生的 mcp_servers 和 hooks 配置）
 
         将配置中的 MCP 服务器和 Hook 设置转换为 SDK 格式，
-        并将 SDK 客户端传递给智能体。
+        获取 MCP 工具列表并传递给智能体。
 
         Args:
             settings: 系统设置配置
@@ -182,47 +182,36 @@ class ConversationManager:
             logger.debug("无 MCP 服务器或 Hook 配置，跳过 SDK 工具设置")
             return
 
-        try:
-            from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-        except ImportError:
-            logger.warning(
-                "claude-agent-sdk 未安装，跳过 SDK 工具设置。"
-                "安装命令: pip install claude-agent-sdk"
-            )
-            return
+        # 获取 MCP 工具列表
+        mcp_tools_list = []
+        if settings.tools.mcp_servers:
+            from mind.tools.mcp_client_manager import MCPClientManager
 
-        # 转换 MCP 服务器配置为 SDK 格式
-        mcp_servers = {}
-        for name, config in settings.tools.mcp_servers.items():
-            mcp_servers[name] = {
-                "command": config.command,
-                "args": config.args,
-                "env": config.env,
-            }
+            manager = MCPClientManager()
+            try:
+                mcp_servers_dict = {}
+                for name, config in settings.tools.mcp_servers.items():
+                    mcp_servers_dict[name] = {
+                        "command": config.command,
+                        "args": config.args,
+                        "env": config.env,
+                    }
 
-        # 构建 Hooks 配置
-        hooks = self._build_hooks_config(settings)
+                mcp_tools_list = await manager.get_all_tools(mcp_servers_dict)
+                logger.info(f"获取了 {len(mcp_tools_list)} 个 MCP 工具")
+            except Exception as e:
+                logger.warning(f"获取 MCP 工具失败: {e}")
+            finally:
+                await manager.close()
 
-        # 创建 SDK 选项（SDK 配置类型复杂，使用字典简化）
-        options = ClaudeAgentOptions(
-            mcp_servers=mcp_servers if mcp_servers else None,  # type: ignore[arg-type]
-            hooks=hooks if hooks else None,
-        )
+        # 将 MCP 工具列表存储到实例属性中，供 ResponseHandler 使用
+        self._mcp_tools_list = mcp_tools_list
 
-        # 创建 SDK 客户端（存储但不自动连接）
-        self._sdk_client = ClaudeSDKClient(options=options)
+        # 同时更新 response_handler 的 mcp_tools
+        self.agent_a.response_handler.mcp_tools = self._mcp_tools_list
+        self.agent_b.response_handler.mcp_tools = self._mcp_tools_list
 
-        # 将 SDK 客户端传递给两个智能体
-        self.agent_a.sdk_client = self._sdk_client
-        self.agent_b.sdk_client = self._sdk_client
-        # 同时更新 response_handler 的 sdk_client
-        self.agent_a.response_handler.sdk_client = self._sdk_client
-        self.agent_b.response_handler.sdk_client = self._sdk_client
-
-        logger.info(
-            f"SDK 工具已设置: {len(mcp_servers)} 个 MCP 服务器, "
-            f"{len(hooks)} 个 Hook 配置"
-        )
+        logger.info(f"MCP 工具已设置: {len(mcp_tools_list)} 个工具")
 
     def _build_hooks_config(self, settings: SettingsConfig) -> dict:
         """构建 Hooks 配置
