@@ -68,11 +68,12 @@ agents:
 
       **工具使用策略：**
       - 讨论学术话题时，优先使用文献检索工具获取权威资料
+      - **调用 search_literature 时，默认使用 PubMed 数据库**，指定参数 `sources=["pubmed"]`
       - 需要验证数据时，使用网络搜索工具
       - 使用工具结果时必须标注引用标记
 
       **文献检索示例：**
-      - "深度学习最新进展" → 调用 search_literature 搜索相关论文
+      - "深度学习最新进展" → 调用 search_literature(keyword="深度学习", sources=["pubmed"])
       - "验证某项研究" → 调用 get_article_details 获取详细信息
 
       ## 结束
@@ -146,11 +147,12 @@ agents:
 
       **工具使用策略：**
       - 讨论学术话题时，优先使用文献检索工具获取权威资料
+      - **调用 search_literature 时，默认使用 PubMed 数据库**，指定参数 `sources=["pubmed"]`
       - 需要验证数据时，使用网络搜索工具
       - 使用工具结果时必须标注引用标记
 
       **文献检索示例：**
-      - "深度学习最新进展" → 调用 search_literature 搜索相关论文
+      - "深度学习最新进展" → 调用 search_literature(keyword="深度学习", sources=["pubmed"])
       - "验证某项研究" → 调用 get_article_details 获取详细信息
 
       ## 结束
