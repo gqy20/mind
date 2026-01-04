@@ -25,8 +25,12 @@ async def test_response_handler_returns_text():
     mock_stream.__aenter__ = AsyncMock(return_value=mock_iter())
     mock_stream.__aexit__ = AsyncMock(return_value=None)
 
+    # 注意：现在使用 beta.messages.stream 而不是 messages.stream
+    mock_beta_messages = MagicMock()
+    mock_beta_messages.stream = MagicMock(return_value=mock_stream)
+
     mock_anthropic = MagicMock()
-    mock_anthropic.messages.stream = MagicMock(return_value=mock_stream)
+    mock_anthropic.beta.messages = mock_beta_messages
 
     with patch.object(
         AnthropicClient,

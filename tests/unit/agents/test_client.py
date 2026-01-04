@@ -36,8 +36,12 @@ async def test_client_stream_returns_events():
     mock_stream.__aexit__ = AsyncMock(return_value=None)
 
     # 创建模拟的客户端
+    # 注意：现在使用 beta.messages.stream 而不是 messages.stream
+    mock_beta_messages = MagicMock()
+    mock_beta_messages.stream = MagicMock(return_value=mock_stream)
+
     mock_anthropic = MagicMock()
-    mock_anthropic.messages.stream = MagicMock(return_value=mock_stream)
+    mock_anthropic.beta.messages = mock_beta_messages
 
     with patch.object(
         AnthropicClient,

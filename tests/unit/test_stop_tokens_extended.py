@@ -85,8 +85,12 @@ async def test_stop_tokens_prevents_internal_tag_output():
     mock_stream.__aenter__ = AsyncMock(return_value=mock_iter())
     mock_stream.__aexit__ = AsyncMock(return_value=None)
 
+    # 注意：现在使用 beta.messages.stream 而不是 messages.stream
+    mock_beta_messages = MagicMock()
+    mock_beta_messages.stream = MagicMock(return_value=mock_stream)
+
     mock_anthropic = MagicMock()
-    mock_anthropic.messages.stream = MagicMock(return_value=mock_stream)
+    mock_anthropic.beta.messages = mock_beta_messages
 
     with patch("mind.agents.client.AsyncAnthropic", return_value=mock_anthropic):
         client = AnthropicClient(model="test-model", api_key="test-key")
@@ -101,6 +105,6 @@ async def test_stop_tokens_prevents_internal_tag_output():
             pass
 
     # 验证 stop_sequences 被正确传递
-    call_kwargs = mock_anthropic.messages.stream.call_args[1]
+    call_kwargs = mock_beta_messages.stream.call_args[1]
     assert "stop_sequences" in call_kwargs
     assert call_kwargs["stop_sequences"] == stop_tokens

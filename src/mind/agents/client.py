@@ -92,10 +92,11 @@ class AnthropicClient:
         if stop_tokens:
             kwargs["stop_sequences"] = stop_tokens
 
-        # documents 需要通过 extra_body 传递（Citations API）
+        # Citations API 是 beta 功能，需要使用 beta.messages
+        # documents 参数在 beta API 中支持
         if documents:
             kwargs["extra_body"] = {"documents": documents}
 
-        async with self.client.messages.stream(**kwargs) as stream:  # type: ignore[arg-type]
+        async with self.client.beta.messages.stream(**kwargs) as stream:  # type: ignore[arg-type]
             async for event in stream:
                 yield event

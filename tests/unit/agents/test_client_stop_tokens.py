@@ -39,8 +39,12 @@ class TestStopTokens:
         mock_stream.__aexit__ = AsyncMock(return_value=None)
         mock_stream.__aiter__ = lambda self: empty_stream()
 
+        # 注意：现在使用 beta.messages.stream 而不是 messages.stream
+        mock_beta_messages = MagicMock()
+        mock_beta_messages.stream.return_value = mock_stream
+
         mock_client = MagicMock()
-        mock_client.messages.stream.return_value = mock_stream
+        mock_client.beta.messages = mock_beta_messages
 
         with patch("mind.agents.client.AsyncAnthropic", return_value=mock_client):
             client = AnthropicClient(model="test-model", api_key="test-key")
@@ -53,7 +57,7 @@ class TestStopTokens:
                 pass
 
             # 验证调用时没有 stop_sequences
-            call_kwargs = mock_client.messages.stream.call_args[1]
+            call_kwargs = mock_beta_messages.stream.call_args[1]
             assert "stop_sequences" not in call_kwargs
 
     @pytest.mark.asyncio
@@ -72,8 +76,12 @@ class TestStopTokens:
         mock_stream.__aexit__ = AsyncMock(return_value=None)
         mock_stream.__aiter__ = lambda self: empty_stream()
 
+        # 注意：现在使用 beta.messages.stream 而不是 messages.stream
+        mock_beta_messages = MagicMock()
+        mock_beta_messages.stream.return_value = mock_stream
+
         mock_client = MagicMock()
-        mock_client.messages.stream.return_value = mock_stream
+        mock_client.beta.messages = mock_beta_messages
 
         with patch("mind.agents.client.AsyncAnthropic", return_value=mock_client):
             client = AnthropicClient(model="test-model", api_key="test-key")
@@ -90,6 +98,6 @@ class TestStopTokens:
                 pass
 
             # 验证 stop_sequences 被正确传递
-            call_kwargs = mock_client.messages.stream.call_args[1]
+            call_kwargs = mock_beta_messages.stream.call_args[1]
             assert "stop_sequences" in call_kwargs
             assert call_kwargs["stop_sequences"] == stop_tokens
