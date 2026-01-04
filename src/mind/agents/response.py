@@ -5,7 +5,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from anthropic import APIStatusError
 from anthropic.types import ToolParam
@@ -462,98 +462,6 @@ class ResponseHandler:
 
         logger.info(f"重试完成，生成响应长度: {len(response_text)}")
         return response_text
-
-    async def _execute_tools_parallel(
-        self,
-        tool_calls: list[dict],
-        messages: list["MessageParam"],
-        system: str,
-        interrupt: asyncio.Event,
-    ) -> str | None:
-        """并行执行多个工具调用
-
-        Args:
-            tool_calls: 工具调用列表
-            messages: 对话历史
-            system: 系统提示词
-            interrupt: 中断事件
-
-        Returns:
-            继续生成的响应文本
-        """
-        if not tool_calls:
-            return None
-
-        logger.info(f"开始并行执行 {len(tool_calls)} 个工具调用")
-
-        # 准备并行任务
-        async def execute_single_tool(tool_call: dict) -> dict | None:
-            """执行单个工具并返回结果
-
-            Returns:
-                (tool_call_id, result_text) 或 None
-            """
-            tool_name = tool_call.get("name", "")
-            if tool_name == "search_web":
-                result = await self._execute_tool_search(
-                    tool_call, messages, system, interrupt
-                )
-                return {"id": tool_call.get("id"), "result": result}
-            else:
-                logger.warning(f"未知工具: {tool_name}")
-                return None
-
-        # 并行执行所有工具
-        tasks = [execute_single_tool(tc) for tc in tool_calls]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # 过滤有效的结果
-        valid_results: list[dict] = [
-            cast(dict, r)
-            for r in results
-            if r is not None and not isinstance(r, Exception)
-        ]
-        for r in results:
-            if isinstance(r, Exception):
-                logger.exception(f"工具执行异常: {r}")
-
-        if not valid_results:
-            logger.warning("所有工具执行都失败了")
-            return None
-
-        # 构建符合 API 格式的消息
-        # Assistant: 所有 tool_use 块
-        tool_use_blocks: list[dict] = [
-            {
-                "type": "tool_use",
-                "id": tc["id"],
-                "name": tc.get("name", ""),
-                "input": tc.get("input", {}),
-            }
-            for tc in tool_calls
-        ]
-
-        # User: 所有 tool_result 块
-        tool_result_blocks: list[dict] = [
-            {
-                "type": "tool_result",
-                "tool_use_id": vr["id"],
-                "content": vr.get("result") or "",
-            }
-            for vr in valid_results
-        ]
-
-        # 添加到消息历史
-        messages.append({"role": "assistant", "content": tool_use_blocks})  # type: ignore[typeddict-item]
-        messages.append({"role": "user", "content": tool_result_blocks})  # type: ignore[typeddict-item]
-
-        logger.debug(
-            f"已添加 {len(tool_use_blocks)} 个 tool_use 和 "
-            f"{len(tool_result_blocks)} 个 tool_result 到消息历史"
-        )
-
-        # 基于工具结果继续生成，传递 system 参数
-        return await self._continue_response(messages, system, interrupt)
 
     async def _execute_tools_serial(
         self,

@@ -75,8 +75,8 @@ async def test_respond_passes_system_to_continue():
     )
 
 
-def test_execute_tools_parallel_passes_system():
-    """测试 _execute_tools_parallel 正确传递 system 参数
+def test_execute_tools_serial_passes_system():
+    """测试 _execute_tools_serial 正确传递 system 参数
 
     通过代码检查验证修复后的正确行为。
     """
@@ -85,11 +85,11 @@ def test_execute_tools_parallel_passes_system():
     from mind.agents.response import ResponseHandler
 
     # 获取源码
-    source = inspect.getsource(ResponseHandler._execute_tools_parallel)
+    source = inspect.getsource(ResponseHandler._execute_tools_serial)
 
     # 验证代码中正确传递 system 参数
     assert "_continue_response(messages, system, interrupt)" in source, (
-        "修复后 _execute_tools_parallel 应该传递 system 参数给 _continue_response"
+        "_execute_tools_serial 应该传递 system 参数给 _continue_response"
     )
 
 
