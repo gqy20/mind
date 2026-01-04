@@ -306,6 +306,7 @@ class FlowController:
                 search_query = self.search_handler.extract_search_query()
                 if search_query:
                     # 检查上一轮响应中是否有明确的搜索请求
+                    is_ai_requested = False
                     if last_response:
                         explicit_query = (
                             self.search_handler.extract_search_from_response(
@@ -314,7 +315,10 @@ class FlowController:
                         )
                         if explicit_query:
                             search_query = explicit_query
-                    output.append(await self._execute_search(search_query))
+                            is_ai_requested = True
+                    output.append(
+                        await self._execute_search(search_query, is_ai_requested)
+                    )
                     # 搜索后清空 last_response，避免重复触发
                     last_response = None
                     continue
@@ -723,12 +727,22 @@ class FlowController:
         """处理结束提议（委托给 EndingHandler）"""
         await self.ending_handler.handle_proposal(agent_name, response)
 
-    async def _execute_search(self, query: str) -> str:
-        """执行搜索并返回结果消息"""
+    async def _execute_search(self, query: str, is_ai_requested: bool = False) -> str:
+        """执行搜索并返回结果消息
+
+        Args:
+            query: 搜索关键词
+            is_ai_requested: 是否是 AI 主动请求的搜索
+
+        Returns:
+            搜索结果消息
+        """
         from mind.tools.search_tool import search_web
 
-        logger.info(f"第 {self.manager.turn} 轮：触发网络搜索")
-        msg = f"\n🔍 [搜索] 正在搜索 '{query}'..."
+        # 区分 AI 主动搜索和系统搜索
+        search_type = "AI搜索" if is_ai_requested else "搜索"
+        logger.info(f"第 {self.manager.turn} 轮：触发{search_type}")
+        msg = f"\n🔍 [{search_type}] 正在搜索 '{query}'..."
 
         search_result = await search_web(query, max_results=3)
 
@@ -795,7 +809,7 @@ class FlowController:
         """执行 AI 主动请求的搜索"""
         logger.info(f"AI 主动请求搜索: {query}")
         print(
-            f"\n🔍 [搜索] 正在搜索 '{query}'...",
+            f"\n🔍 [AI搜索] 正在搜索 '{query}'...",
             end="",
             flush=True,
         )
