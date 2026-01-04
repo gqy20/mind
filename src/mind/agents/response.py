@@ -47,6 +47,7 @@ class ResponseHandler:
         documents=None,
         stop_tokens: list[str] | None = None,
         mcp_tools: list[dict] | None = None,
+        mcp_manager=None,
     ):
         """初始化响应处理器
 
@@ -58,6 +59,7 @@ class ResponseHandler:
             documents: 可选的文档池，用于存储搜索结果
             stop_tokens: 停止序列列表
             mcp_tools: 可选的 MCP 工具列表
+            mcp_manager: 可选的 MCP 客户端管理器
         """
         self.client = client
         self.search_history = search_history
@@ -66,6 +68,7 @@ class ResponseHandler:
         self.documents = documents
         self.stop_tokens = stop_tokens
         self.mcp_tools = mcp_tools or []
+        self.mcp_manager = mcp_manager
 
     def _handle_content_block_delta(
         self, event, response_text: str, has_text_delta: bool
@@ -505,14 +508,40 @@ class ResponseHandler:
                 (tool_call_id, result_text) 或 None
             """
             tool_name = tool_call.get("name", "")
+
+            # 处理内置搜索工具
             if tool_name == "search_web":
                 result = await self._execute_tool_search(
                     tool_call, messages, system, interrupt
                 )
                 return {"id": tool_call.get("id"), "result": result}
-            else:
-                logger.warning(f"未知工具: {tool_name}")
-                return None
+
+            # 处理 MCP 工具
+            if self.mcp_manager:
+                # 检查是否是 MCP 工具
+                mcp_tool_names = [tool.get("name") for tool in self.mcp_tools]
+                if tool_name in mcp_tool_names:
+                    logger.info(f"调用 MCP 工具: {tool_name}")
+                    print(f"\n🔧 [MCP] 正在调用 {tool_name}...", end="", flush=True)
+
+                    # 获取工具参数
+                    arguments = tool_call.get("input", {})
+
+                    # 调用 MCP 工具
+                    result = await self.mcp_manager.call_tool(tool_name, arguments)
+
+                    if result:
+                        print(" ✅")
+                        logger.info(f"MCP 工具 {tool_name} 返回结果")
+                        return {"id": tool_call.get("id"), "result": str(result)}
+                    else:
+                        print(" ⚠️ (失败)")
+                        logger.warning(f"MCP 工具 {tool_name} 执行失败")
+                        return {"id": tool_call.get("id"), "result": "工具执行失败"}
+
+            # 未知工具
+            logger.warning(f"未知工具: {tool_name}")
+            return {"id": tool_call.get("id"), "result": "未知工具"}
 
         # 串行执行每个工具
         for i, tool_call in enumerate(tool_calls):

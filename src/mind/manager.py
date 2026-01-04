@@ -184,32 +184,32 @@ class ConversationManager:
 
         # 获取 MCP 工具列表
         mcp_tools_list = []
+        mcp_manager = None
         if settings.tools.mcp_servers:
             from mind.tools.mcp_client_manager import MCPClientManager
 
-            manager = MCPClientManager()
+            mcp_manager = MCPClientManager()
             try:
-                mcp_servers_dict = {}
-                for name, config in settings.tools.mcp_servers.items():
-                    mcp_servers_dict[name] = {
-                        "command": config.command,
-                        "args": config.args,
-                        "env": config.env,
-                    }
-
-                mcp_tools_list = await manager.get_all_tools(mcp_servers_dict)
+                # 直接传递 MCPServerConfig 对象，MCPClientManager 会处理
+                mcp_tools_list = await mcp_manager.get_all_tools(
+                    settings.tools.mcp_servers
+                )
                 logger.info(f"获取了 {len(mcp_tools_list)} 个 MCP 工具")
             except Exception as e:
                 logger.warning(f"获取 MCP 工具失败: {e}")
-            finally:
-                await manager.close()
+                # 获取失败时关闭 manager
+                await mcp_manager.close()
+                mcp_manager = None
 
-        # 将 MCP 工具列表存储到实例属性中，供 ResponseHandler 使用
+        # 将 MCP 工具列表和 manager 存储到实例属性中
         self._mcp_tools_list = mcp_tools_list
+        self._mcp_manager = mcp_manager
 
-        # 同时更新 response_handler 的 mcp_tools
+        # 同时更新 response_handler 的 mcp_tools 和 mcp_manager
         self.agent_a.response_handler.mcp_tools = self._mcp_tools_list
+        self.agent_a.response_handler.mcp_manager = self._mcp_manager
         self.agent_b.response_handler.mcp_tools = self._mcp_tools_list
+        self.agent_b.response_handler.mcp_manager = self._mcp_manager
 
         logger.info(f"MCP 工具已设置: {len(mcp_tools_list)} 个工具")
 
