@@ -7,11 +7,15 @@ import os
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ToolParam
 
 if TYPE_CHECKING:
     Event = Any  # API 返回的事件类型
+
+# Timeout 类型可以是 float（秒数）或 httpx.Timeout 对象
+Timeout = float | httpx.Timeout
 
 
 class AnthropicClient:
@@ -22,6 +26,8 @@ class AnthropicClient:
         model: str,
         api_key: str | None = None,
         base_url: str | None = None,
+        max_retries: int = 2,
+        timeout: Timeout | None = None,
     ):
         """初始化客户端
 
@@ -29,16 +35,24 @@ class AnthropicClient:
             model: 使用的模型名称
             api_key: API 密钥，默认从环境变量读取
             base_url: API 基础 URL（可选，用于代理等场景）
+            max_retries: 最大重试次数，默认 2（anthropic 库默认值）
+            timeout: 请求超时配置，可以是秒数（float）或 httpx.Timeout 对象
         """
         self.model = model
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY 环境变量未设置")
 
+        # 构建 AsyncAnthropic 参数
+        client_kwargs: dict[str, Any] = {"api_key": self.api_key}
         if base_url:
-            self.client = AsyncAnthropic(api_key=self.api_key, base_url=base_url)
-        else:
-            self.client = AsyncAnthropic(api_key=self.api_key)
+            client_kwargs["base_url"] = base_url
+        if max_retries != 2:  # 只在非默认值时传递
+            client_kwargs["max_retries"] = max_retries
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
+
+        self.client = AsyncAnthropic(**client_kwargs)
 
     async def stream(
         self,
