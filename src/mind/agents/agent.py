@@ -145,7 +145,10 @@ class Agent:
         self.documents.add(doc)
 
     async def query_tool(
-        self, question: str, messages: list["MessageParam"] | None = None
+        self,
+        question: str,
+        messages: list["MessageParam"] | None = None,
+        current_turn: int | None = None,
     ) -> str | None:
         """分析对话上下文
 
@@ -154,6 +157,7 @@ class Agent:
         Args:
             question: 查询问题（注意：当前版本忽略此参数，分析全部对话）
             messages: 对话历史记录
+            current_turn: 当前对话轮次（如果提供，将用于准确显示轮次）
 
         Returns:
             对话摘要，如果对话为空或分析失败则返回 None
@@ -162,7 +166,7 @@ class Agent:
             logger.debug(f"智能体 {self.name} 对话历史为空")
             return None
 
-        return self.analyzer.analyze(messages)
+        return self.analyzer.analyze(messages, current_turn=current_turn)
 
     def _format_messages_with_documents(
         self, messages: list["MessageParam"]

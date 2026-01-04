@@ -333,8 +333,16 @@ class FlowController:
             # ========== 处理过渡期逻辑 ==========
             if self.manager.pending_end_count > 0:
                 # 当前在过渡期，减少计数
-                self.manager.pending_end_count -= 1
-                logger.debug(f"过渡期剩余轮数: {self.manager.pending_end_count}")
+                remaining = self.manager.pending_end_count - 1
+                self.manager.pending_end_count = remaining
+                logger.debug(f"过渡期剩余轮数: {remaining}")
+
+                # 显示过渡期剩余轮数
+                output.append("")
+                if remaining > 0:
+                    output.append(f"⏳ [过渡期] 还剩 {remaining} 轮结束对话")
+                else:
+                    output.append("⏳ [过渡期] 即将结束...")
 
                 if self.manager.pending_end_count == 0:
                     # 过渡期结束，真正结束对话
@@ -398,7 +406,10 @@ class FlowController:
             # 本地对话分析（不是网络搜索）
             msg = "\n📋 [分析对话] 正在查看当前对话上下文..."
             console.print(msg, end="")
-            tool_result = await agent.query_tool("总结当前对话", self.manager.messages)
+            # 传递当前轮次，确保显示正确的轮次数
+            tool_result = await agent.query_tool(
+                "总结当前对话", self.manager.messages, current_turn=self.manager.turn
+            )
             console.print(" ✅")
             if tool_result:
                 # 将工具结果注入到对话历史
@@ -516,11 +527,12 @@ class FlowController:
     async def _turn(self):
         """执行一轮对话"""
         # ========== 处理过渡期 ==========
-        # 如果在过渡期，减少计数
+        # 如果在过渡期，显示剩余轮数并减少计数
         if self.manager.pending_end_count > 0:
-            self.manager.pending_end_count -= 1
+            remaining = self.manager.pending_end_count - 1
+            self.manager.pending_end_count = remaining
             logger.debug(
-                f"过渡期剩余轮数: {self.manager.pending_end_count}/"
+                f"过渡期剩余轮数: {remaining}/"
                 f"{self.manager.end_detector.config.transition_turns}"
             )
 
@@ -568,6 +580,18 @@ class FlowController:
                 self.manager.memory.config.max_context,
             )
             console.print()  # 进度后换行
+
+            # ========== 显示过渡期剩余轮数 ==========
+            # 如果在过渡期（包括刚减为 0 的情况），显示提示
+            if (
+                hasattr(self.manager, "_pending_end_active")
+                and self.manager._pending_end_active
+            ):
+                remaining = self.manager.pending_end_count
+                if remaining > 0:
+                    console.print(f"⏳ [过渡期] 还剩 {remaining} 轮结束对话")
+                else:
+                    console.print("⏳ [过渡期] 即将结束...")
 
             # 检测对话结束标记（使用 AI 分析）
             end_result = await self.manager.end_detector.detect_async(

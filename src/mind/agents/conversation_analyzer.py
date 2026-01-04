@@ -17,13 +17,16 @@ logger = get_logger("mind.agents.conversation_analyzer")
 
 
 def analyze_conversation(
-    messages: list[MessageParam], max_recent: int = 3
+    messages: list[MessageParam],
+    max_recent: int = 3,
+    current_turn: int | None = None,
 ) -> str | None:
     """分析对话上下文，提取关键信息
 
     Args:
         messages: 对话历史记录
         max_recent: 保留最近的回复数量
+        current_turn: 当前对话轮次（如果提供，将使用此值而非统计消息数量）
 
     Returns:
         对话摘要，如果对话为空或分析失败则返回 None
@@ -82,7 +85,11 @@ def analyze_conversation(
             summary_parts.append(f"**对话话题**: {first_topic}")
 
         # 2. 对话统计
-        summary_parts.append(f"**对话轮次**: {len(assistant_responses)} 轮交流")
+        # 优先使用提供的 current_turn，否则统计 assistant 消息数量
+        turn_count = (
+            current_turn if current_turn is not None else len(assistant_responses)
+        )
+        summary_parts.append(f"**对话轮次**: {turn_count} 轮交流")
 
         # 3. 最近的观点（取最后 N 条，如果有的话）
         if assistant_responses:
@@ -114,13 +121,18 @@ class ConversationAnalyzer:
         """
         self.max_recent = max_recent
 
-    def analyze(self, messages: list[MessageParam]) -> str | None:
+    def analyze(
+        self, messages: list[MessageParam], current_turn: int | None = None
+    ) -> str | None:
         """分析对话上下文
 
         Args:
             messages: 对话历史记录
+            current_turn: 当前对话轮次（如果提供，将使用此值而非统计消息数量）
 
         Returns:
             对话摘要
         """
-        return analyze_conversation(messages, max_recent=self.max_recent)
+        return analyze_conversation(
+            messages, max_recent=self.max_recent, current_turn=current_turn
+        )

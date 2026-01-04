@@ -23,9 +23,9 @@ async def test_check_and_execute_tools_with_tool_result(flow_controller, mock_ma
 
     await flow_controller._check_and_execute_tools(mock_manager.agent_a)
 
-    # 验证工具被调用
+    # 验证工具被调用（包含 current_turn 参数）
     mock_manager.agent_a.query_tool.assert_called_once_with(
-        "总结当前对话", mock_manager.messages
+        "总结当前对话", mock_manager.messages, current_turn=3
     )
 
     # 验证工具结果被添加到历史
