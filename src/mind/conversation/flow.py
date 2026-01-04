@@ -686,17 +686,14 @@ class FlowController:
                 # 用户确认结束
                 logger.info("用户确认结束对话（过渡期结束）")
 
-                # 生成对话总结
+                # 生成对话总结（SummarizerAgent 会流式输出）
                 console.print(f"\n{'=' * 60}")
                 console.print("正在生成对话总结...")
                 console.print(f"{'=' * 60}\n")
                 self.manager.summary = await self.manager._summarize_conversation()
 
+                # 总结已在生成时流式输出，这里只打印保存提示
                 console.print(f"\n{'=' * 60}")
-                console.print("📝 对话总结")
-                console.print(f"{'=' * 60}")
-                console.print(f"{self.manager.summary}\n")
-                console.print(f"{'=' * 60}")
                 console.print("💾 对话已保存（包含总结）")
                 console.print(f"{'=' * 60}\n")
 
@@ -860,14 +857,11 @@ class FlowController:
             console.print("正在生成对话总结...")
             console.print(f"{'=' * 60}\n")
 
-            # 生成总结
+            # 生成总结（SummarizerAgent 会流式输出）
             self.manager.summary = await self.manager._summarize_conversation()
 
+            # 总结已在生成时流式输出，这里只打印保存提示
             console.print(f"\n{'=' * 60}")
-            console.print("📝 对话总结")
-            console.print(f"{'=' * 60}")
-            console.print(f"{self.manager.summary}\n")
-            console.print(f"{'=' * 60}")
             console.print("💾 对话已保存（包含总结）")
             console.print(f"{'=' * 60}\n")
 

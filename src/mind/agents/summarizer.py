@@ -107,7 +107,7 @@ class SummarizerAgent:
 3. 关键共识点
 4. 主要分歧点
 
-总结不超过 300 字。"""
+总结在 1000 字左右，详细但不冗长。"""
 
         # 构建消息
         messages_for_summary: list[MessageParam] = [
