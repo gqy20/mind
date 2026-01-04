@@ -42,9 +42,12 @@ class SearchHandler:
                 if msg.get("role") == "user":
                     content = msg.get("content", "")
                     if isinstance(content, str) and content.strip():
-                        # 简单清理：去除明显的对话标记
-                        # 移除 / 命令前缀
                         clean_query = content.strip()
+
+                        # 移除系统消息（轮次标记）
+                        if clean_query.startswith("现在由 ") and " 发言" in clean_query:
+                            continue
+
                         # 移除常见的命令前缀
                         for prefix in ["/quit", "/exit", "/clear"]:
                             if clean_query.startswith(prefix):

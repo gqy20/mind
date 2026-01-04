@@ -192,3 +192,47 @@ class TestSearchHandler:
         query = handler.extract_search_query()
 
         assert len(query) == 100
+
+    def test_extract_search_query_skips_turn_marker(self):
+        """测试跳过轮次标记"""
+        from mind.conversation.search_handler import SearchHandler
+
+        manager = MagicMock()
+        manager.configure_mock(
+            messages=[
+                # 最新的消息是轮次标记
+                {"role": "user", "content": "现在由 挑战者 发言"},
+                # 之前的消息是真实用户消息
+                {"role": "user", "content": "Python 异步编程最佳实践"},
+            ],
+            topic=None,
+        )
+
+        handler = SearchHandler(manager)
+        query = handler.extract_search_query()
+
+        # 应该跳过轮次标记，使用真实的用户消息
+        assert query == "Python 异步编程最佳实践"
+
+    def test_extract_search_query_multiple_turn_markers(self):
+        """测试多个轮次标记的情况"""
+        from mind.conversation.search_handler import SearchHandler
+
+        manager = MagicMock()
+        manager.configure_mock(
+            messages=[
+                {"role": "user", "content": "现在由 挑战者 发言"},
+                {"role": "assistant", "content": "之前的回答"},
+                {"role": "user", "content": "现在由 支持者 发言"},
+                {"role": "assistant", "content": "更之前的回答"},
+                # 真实的用户消息
+                {"role": "user", "content": "什么是同倍体杂交？"},
+            ],
+            topic="同倍体杂交物种形成",
+        )
+
+        handler = SearchHandler(manager)
+        query = handler.extract_search_query()
+
+        # 应该跳过所有轮次标记，使用真实的用户消息
+        assert query == "什么是同倍体杂交？"
