@@ -90,17 +90,21 @@ async def test_handle_citations_delta_event():
     Given: 一个 content_block_delta 事件，包含 citations_delta
     When: 调用事件处理方法
     Then: 返回提取的引用信息
+
+    Note: 使用官方规范格式 event.delta.citation（单数）
+    参考：https://platform.claude.com/docs/en/api/messages
     """
     mock_client = MagicMock(spec=AnthropicClient)
     handler = ResponseHandler(client=mock_client)
 
-    # 创建引用事件
+    # 创建引用事件（使用官方规范格式：citation 单数）
     citation = MagicMock()
     citation.type = "text"
     citation.document_title = "测试文档"
     citation.cited_text = "引用的文本内容"
+    citation.document_index = 0
 
-    delta = MockDelta("citations_delta", citations=[citation])
+    delta = MockDelta("citations_delta", citation=citation)
     event = MockStreamEvent("content_block_delta", delta=delta)
 
     response_text, has_text_delta, citations = handler._handle_content_block_delta(
@@ -113,6 +117,7 @@ async def test_handle_citations_delta_event():
     assert len(citations) == 1
     assert citations[0]["document_title"] == "测试文档"
     assert citations[0]["cited_text"] == "引用的文本内容"
+    assert citations[0]["document_index"] == 0
     assert response_text == ""
     assert has_text_delta is False
 

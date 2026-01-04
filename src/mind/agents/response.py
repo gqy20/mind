@@ -97,17 +97,20 @@ class ResponseHandler:
             return response_text, True, citations_buffer
 
         elif delta_type == "citations_delta":
-            if hasattr(event.delta, "citations"):
-                for citation in event.delta.citations:
-                    citations_buffer.append(
-                        {
-                            "type": getattr(citation, "type", "unknown"),
-                            "document_title": getattr(
-                                citation, "document_title", "未知来源"
-                            ),
-                            "cited_text": getattr(citation, "cited_text", ""),
-                        }
-                    )
+            # Citations API 官方规范：event.delta.citation（单数）
+            # 参考：https://platform.claude.com/docs/en/api/messages
+            if hasattr(event.delta, "citation"):
+                citation = event.delta.citation
+                citations_buffer.append(
+                    {
+                        "type": getattr(citation, "type", "unknown"),
+                        "document_title": getattr(
+                            citation, "document_title", "未知来源"
+                        ),
+                        "cited_text": getattr(citation, "cited_text", ""),
+                        "document_index": getattr(citation, "document_index", 0),
+                    }
+                )
             return response_text, has_text_delta, citations_buffer
 
         return response_text, has_text_delta, citations_buffer
