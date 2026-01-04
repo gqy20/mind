@@ -68,6 +68,9 @@ class FlowController:
         Args:
             topic: 对话主题
         """
+        # 标记为交互模式
+        self._is_interactive = True
+
         # 保存主题和开始时间
         self.manager.topic = topic
         self.manager.start_time = datetime.now()
@@ -255,6 +258,9 @@ class FlowController:
         Returns:
             对话输出文本
         """
+        # 标记为非交互模式
+        self._is_interactive = False
+
         # 初始化对话
         await self._initialize_conversation(topic)
 
@@ -585,7 +591,48 @@ class FlowController:
             # 交互模式：提示用户确认
             console.print("\n📢 [系统] 过渡期结束，是否确认结束对话？")
             console.print("  按 Enter 确认结束，或输入其他内容继续对话")
-            # 这里会在 input_mode 中被处理
+            print("> ", end="", flush=True)
+
+            # 获取用户输入
+            try:
+                user_input = await asyncio.get_event_loop().run_in_executor(None, input)
+            except EOFError:
+                user_input = ""
+
+            console.print()  # 换行
+
+            if not user_input.strip():
+                # 用户确认结束
+                logger.info("用户确认结束对话（过渡期结束）")
+
+                # 生成对话总结
+                console.print(f"\n{'=' * 60}")
+                console.print("正在生成对话总结...")
+                console.print(f"{'=' * 60}\n")
+                self.manager.summary = await self.manager._summarize_conversation()
+
+                console.print(f"\n{'=' * 60}")
+                console.print("📝 对话总结")
+                console.print(f"{'=' * 60}")
+                console.print(f"{self.manager.summary}\n")
+                console.print(f"{'=' * 60}")
+                console.print("💾 对话已保存（包含总结）")
+                console.print(f"{'=' * 60}\n")
+
+                # 保存对话并退出
+                self.manager.is_running = False
+            else:
+                # 用户想继续
+                logger.info("用户选择继续对话（过渡期结束）")
+
+                # 将用户输入添加到对话历史
+                msg = MessageParam(role="user", content=user_input)
+                self.manager.messages.append(msg)
+                self.manager.memory.add_message(msg["role"], str(msg["content"]))
+
+                console.print(f"\n{'=' * 60}")
+                console.print("✅ 继续对话...")
+                console.print(f"{'=' * 60}\n")
 
     async def should_trigger_search(self, last_response: str | None = None) -> bool:
         """判断是否应该触发搜索（委托给 SearchHandler）"""
