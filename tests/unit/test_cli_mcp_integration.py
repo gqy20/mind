@@ -92,7 +92,7 @@ class TestMCPConfigurationLoaded:
         assert "article-mcp" in settings.tools.mcp_servers
         mcp_config = settings.tools.mcp_servers["article-mcp"]
         assert mcp_config.command == "uvx"
-        assert mcp_config.args == ["article-mcp"]
+        assert mcp_config.args == ["article-mcp", "server"]
         # 环境变量应该被展开
         assert "EASYSCHOLAR_SECRET_KEY" in mcp_config.env
 
