@@ -50,7 +50,10 @@ jobs:
           TITLE=$(gh issue view "$ISSUE_NUMBER" --json title --jq '.title')
           BODY=$(gh issue view "$ISSUE_NUMBER" --json body --jq '.body')
           echo "title=$TITLE" >> $GITHUB_OUTPUT
-          echo "body=$BODY" >> $GITHUB_OUTPUT
+          # 使用 heredoc 安全地处理多行内容和特殊字符
+          echo "body<<BODYEOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "BODYEOF" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
