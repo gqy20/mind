@@ -78,28 +78,14 @@ class SettingsConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     stop_tokens: list[str] = Field(
         default_factory=lambda: [
-            # 基本思考标签
+            # 注意：Anthropic API 限制 stop_sequences 最多 4 个元素
+            # 我们只保留最常见的内部思考标签
             "<thinking>",
             "</thinking>",
-            # 反思和分析标签
             "<reflection>",
             "</reflection>",
-            "<analysis>",
-            "</analysis>",
-            # 推理和规划标签
-            "<reasoning>",
-            "</reasoning>",
-            "<thought>",
-            "</thought>",
-            "<plan>",
-            "</plan>",
-            # 内部草稿标签
-            "<scratchpad>",
-            "</scratchpad>",
-            "<internal>",
-            "</internal>",
         ],
-        description="停止序列，遇到这些标记时停止生成（用于过滤 AI 内部思考标签）",
+        description="停止序列，遇到这些标记时停止生成（最多 4 个，API 限制）",
     )
 
 

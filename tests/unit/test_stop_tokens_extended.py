@@ -16,30 +16,12 @@ def test_default_stop_tokens_includes_common_internal_tags():
     assert "<thinking>" in settings.stop_tokens
     assert "</thinking>" in settings.stop_tokens
 
-    # 验证包含其他常见的内部思考标签
-    expected_tags = [
-        "<thinking>",
-        "</thinking>",
-        "<reflection>",
-        "</reflection>",
-        "<analysis>",
-        "</analysis>",
-        "<reasoning>",
-        "</reasoning>",
-        "<thought>",
-        "</thought>",
-        "<plan>",
-        "</plan>",
-        "<scratchpad>",
-        "</scratchpad>",
-        "<internal>",
-        "</internal>",
-    ]
+    # 验证包含 reflection 标签
+    assert "<reflection>" in settings.stop_tokens
+    assert "</reflection>" in settings.stop_tokens
 
-    for tag in expected_tags:
-        assert tag in settings.stop_tokens, (
-            f"期望的内部标签 '{tag}' 应该在默认 stop_tokens 中"
-        )
+    # 验证不超过 4 个（API 限制）
+    assert len(settings.stop_tokens) <= 4, "stop_tokens 不能超过 4 个（API 限制）"
 
 
 def test_stop_tokens_config_loads_from_yaml():
