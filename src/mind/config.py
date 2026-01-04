@@ -77,8 +77,29 @@ class SettingsConfig(BaseModel):
     conversation: ConversationConfig = Field(default_factory=ConversationConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     stop_tokens: list[str] = Field(
-        default_factory=lambda: ["<thinking>", "</thinking>"],
-        description="停止序列，遇到这些标记时停止生成",
+        default_factory=lambda: [
+            # 基本思考标签
+            "<thinking>",
+            "</thinking>",
+            # 反思和分析标签
+            "<reflection>",
+            "</reflection>",
+            "<analysis>",
+            "</analysis>",
+            # 推理和规划标签
+            "<reasoning>",
+            "</reasoning>",
+            "<thought>",
+            "</thought>",
+            "<plan>",
+            "</plan>",
+            # 内部草稿标签
+            "<scratchpad>",
+            "</scratchpad>",
+            "<internal>",
+            "</internal>",
+        ],
+        description="停止序列，遇到这些标记时停止生成（用于过滤 AI 内部思考标签）",
     )
 
 

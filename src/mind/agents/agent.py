@@ -28,6 +28,8 @@ logger = get_logger("mind.agents.agent")
 class Agent:
     """对话智能体 - 对外统一接口"""
 
+    stop_tokens: list[str] | None
+
     def __init__(
         self,
         name: str,
@@ -53,7 +55,14 @@ class Agent:
         self.name = name
         self.model = model or DEFAULT_MODEL
         self.tool_agent = tool_agent
-        self.stop_tokens = stop_tokens
+
+        # 优先使用传入的 stop_tokens，否则从 settings 读取
+        if stop_tokens is not None:
+            self.stop_tokens = stop_tokens
+        elif settings:
+            self.stop_tokens = settings.stop_tokens
+        else:
+            self.stop_tokens = None
 
         # 从配置中读取设置
         if settings:
