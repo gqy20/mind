@@ -478,7 +478,6 @@ class ResponseHandler:
         )
 
         # 基于工具结果继续生成
-        print(f"\n[{self.name}]: ", end="", flush=True)
         return await self._continue_response(messages, "", interrupt)
 
     async def _execute_tool_search(
