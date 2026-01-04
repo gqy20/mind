@@ -101,6 +101,7 @@ class Agent:
             name=self.name,
             documents=self.documents,
             stop_tokens=self.stop_tokens,
+            sdk_client=self.sdk_client,
         )
 
         # 对话分析器

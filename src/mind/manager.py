@@ -215,6 +215,9 @@ class ConversationManager:
         # 将 SDK 客户端传递给两个智能体
         self.agent_a.sdk_client = self._sdk_client
         self.agent_b.sdk_client = self._sdk_client
+        # 同时更新 response_handler 的 sdk_client
+        self.agent_a.response_handler.sdk_client = self._sdk_client
+        self.agent_b.response_handler.sdk_client = self._sdk_client
 
         logger.info(
             f"SDK 工具已设置: {len(mcp_servers)} 个 MCP 服务器, "
