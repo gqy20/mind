@@ -88,9 +88,9 @@ class ConversationManager:
     search_interval: int = 5
     # 搜索历史管理器（每个对话会话独立）
     search_history: "SearchHistory | None" = field(default=None)
-    # 对话结束检测器
+    # 对话结束检测器（将在 __post_init__ 中用 client 重新初始化）
     end_detector: ConversationEndDetector = field(
-        default_factory=lambda: ConversationEndDetector(ConversationEndConfig())
+        default_factory=lambda: ConversationEndDetector()
     )
     # ========== 两轮过渡机制状态 ==========
     # 剩余过渡轮数（0 表示不在过渡期）
@@ -147,6 +147,14 @@ class ConversationManager:
             system_prompt=summarizer_config.system_prompt,
         )
         logger.info("总结智能体已初始化")
+
+        # 重新初始化对话结束检测器，传递 Anthropic client
+        # 使用 agent_a 的 client (AnthropicClient)，再获取其内部的 AsyncAnthropic client
+        self.end_detector = ConversationEndDetector(
+            config=ConversationEndConfig(),
+            client=self.agent_a.client.client,
+        )
+        logger.info("对话结束检测器已初始化（支持 AI 分析）")
 
     @property
     def flow_controller(self) -> "FlowController":

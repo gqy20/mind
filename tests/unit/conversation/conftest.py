@@ -40,7 +40,20 @@ def mock_manager():
     manager.interrupt = MagicMock()
     manager.interrupt.is_set = MagicMock(return_value=False)
     manager.end_detector = MagicMock()
-    manager.end_detector.detect = MagicMock(return_value=MagicMock(detected=False))
+
+    # Mock detect_async 返回未检测到结束
+    async def mock_detect_async(*args, **kwargs):
+        result = MagicMock()
+        result.detected = False
+        result.method = "marker"
+        result.reason = ""
+        result.transition = 0  # 整数类型
+        result.analysis_score = None
+        # 确保可以进行比较操作
+        result.__gt__ = lambda self, other: False
+        return result
+
+    manager.end_detector.detect_async = mock_detect_async
     # 过渡机制状态
     manager.pending_end_count = 0
     manager.pending_end_confirmed = False

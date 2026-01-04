@@ -71,6 +71,8 @@ class TestFlowController:
         manager.interrupt = asyncio.Event()
         manager.enable_tools = False
         manager.search_interval = 0
+        # 过渡机制状态
+        manager.pending_end_count = 0  # 整数类型
 
         # 模拟 agent respond 返回结果
         async def mock_respond(messages, interrupt):
@@ -81,9 +83,18 @@ class TestFlowController:
 
         # 模拟 end_detector
         manager.end_detector = MagicMock()
-        end_result = MagicMock()
-        end_result.detected = False
-        manager.end_detector.detect = MagicMock(return_value=end_result)
+
+        async def mock_detect_async(*args, **kwargs):
+            result = MagicMock()
+            result.detected = False
+            result.method = "marker"
+            result.reason = ""
+            result.transition = 0  # 整数类型
+            result.analysis_score = None
+            result.__gt__ = lambda self, other: False
+            return result
+
+        manager.end_detector.detect_async = mock_detect_async
 
         controller = FlowController(manager)
 
@@ -130,9 +141,18 @@ class TestFlowController:
 
         # 模拟 end_detector
         manager.end_detector = MagicMock()
-        end_result = MagicMock()
-        end_result.detected = False
-        manager.end_detector.detect = MagicMock(return_value=end_result)
+
+        async def mock_detect_async(*args, **kwargs):
+            result = MagicMock()
+            result.detected = False
+            result.method = "marker"
+            result.reason = ""
+            result.transition = 0  # 整数类型
+            result.analysis_score = None
+            result.__gt__ = lambda self, other: False
+            return result
+
+        manager.end_detector.detect_async = mock_detect_async
 
         # 模拟搜索检查
         manager._has_search_request = MagicMock(return_value=False)
@@ -192,10 +212,16 @@ class TestFlowController:
 
         # 模拟 end_detector 检测到结束（无过渡，立即结束）
         manager.end_detector = MagicMock()
-        end_result = MagicMock()
-        end_result.detected = True
-        end_result.transition = 0  # 立即结束
-        manager.end_detector.detect = MagicMock(return_value=end_result)
+
+        async def mock_detect_async(*args, **kwargs):
+            result = MagicMock()
+            result.detected = True
+            result.transition = 0  # 立即结束
+            result.method = "marker"
+            result.reason = ""
+            return result
+
+        manager.end_detector.detect_async = mock_detect_async
 
         # 模拟 _summarize_conversation
         async def mock_summarize():
@@ -237,6 +263,8 @@ class TestFlowController:
         manager.interrupt = asyncio.Event()
         manager.enable_tools = False
         manager.search_interval = 0
+        # 过渡机制状态
+        manager.pending_end_count = 0  # 整数类型
 
         # 模拟 agent respond
         async def mock_respond(messages, interrupt):
@@ -247,9 +275,18 @@ class TestFlowController:
 
         # 模拟 end_detector
         manager.end_detector = MagicMock()
-        end_result = MagicMock()
-        end_result.detected = False
-        manager.end_detector.detect = MagicMock(return_value=end_result)
+
+        async def mock_detect_async(*args, **kwargs):
+            result = MagicMock()
+            result.detected = False
+            result.method = "marker"
+            result.reason = ""
+            result.transition = 0  # 整数类型
+            result.analysis_score = None
+            result.__gt__ = lambda self, other: False
+            return result
+
+        manager.end_detector.detect_async = mock_detect_async
 
         controller = FlowController(manager)
         controller.should_trigger_search = MagicMock(return_value=False)
@@ -282,6 +319,8 @@ class TestFlowController:
         manager.interrupt = asyncio.Event()
         manager.enable_tools = False
         manager.search_interval = 0
+        # 过渡机制状态
+        manager.pending_end_count = 0  # 整数类型
 
         # 模拟 agent respond 返回结束标记
         async def mock_respond(messages, interrupt):
@@ -292,9 +331,17 @@ class TestFlowController:
 
         # 模拟 end_detector 检测到结束
         manager.end_detector = MagicMock()
-        end_result = MagicMock()
-        end_result.detected = True
-        manager.end_detector.detect = MagicMock(return_value=end_result)
+
+        async def mock_detect_async(*args, **kwargs):
+            result = MagicMock()
+            result.detected = True
+            result.method = "marker"
+            result.reason = ""
+            result.transition = 0  # 整数类型，表示立即结束
+            result.__gt__ = lambda self, other: False
+            return result
+
+        manager.end_detector.detect_async = mock_detect_async
 
         controller = FlowController(manager)
         controller.should_trigger_search = MagicMock(return_value=False)

@@ -113,7 +113,17 @@ async def test_process_agent_turn_with_ending_request(flow_controller, mock_mana
     Then: 返回包含结束标记的输出，设置 should_end 标志
     """
     mock_manager.agent_a.respond = AsyncMock(return_value="响应内容 <!-- END -->")
-    mock_manager.end_detector.detect = MagicMock(return_value=MagicMock(detected=True))
+
+    async def mock_detect_async(*args, **kwargs):
+        result = MagicMock()
+        result.detected = True
+        result.method = "marker"
+        result.reason = ""
+        result.transition = 0  # 整数类型
+        result.__gt__ = lambda self, other: False
+        return result
+
+    mock_manager.end_detector.detect_async = mock_detect_async
 
     output_lines, should_end = await flow_controller._process_agent_turn(
         mock_manager.agent_a

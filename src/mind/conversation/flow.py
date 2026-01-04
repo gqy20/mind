@@ -180,17 +180,36 @@ class FlowController:
 
         output.append("")
 
-        # 检测对话结束标记（传入 messages 用于智能分析）
-        end_result = self.manager.end_detector.detect(
+        # 检测对话结束标记（使用 AI 分析）
+        end_result = await self.manager.end_detector.detect_async(
             response, current_turn=next_turn, messages=self.manager.messages
         )
         if end_result.detected:
-            logger.info(f"{agent.name} 请求结束对话（非交互式）")
-            output.append("")
-            output.append("---")
-            output.append("")
-            output.append("⚠️ AI 请求结束对话")
-            return output, True
+            if end_result.transition > 0:
+                # 需要过渡轮数
+                self.manager.pending_end_count = end_result.transition
+                # 设置过渡激活标记（用于检测过渡期结束）
+                self.manager._pending_end_active = True
+                logger.info(
+                    f"{agent.name} 请求结束对话（非交互式），"
+                    f"进入过渡期（{end_result.transition} 轮）"
+                )
+                output.append("")
+                output.append("---")
+                output.append("")
+                output.append(
+                    f"📢 [系统] {agent.name} 建议结束对话，"
+                    f"将进行 {end_result.transition} 轮过渡对话..."
+                )
+                # 继续对话（不立即结束）
+            else:
+                # 立即结束（无过渡轮数）
+                logger.info(f"{agent.name} 请求结束对话（非交互式）")
+                output.append("")
+                output.append("---")
+                output.append("")
+                output.append("⚠️ AI 请求结束对话")
+                return output, True
 
         # 添加消息到历史（不再添加前缀）
         msg = MessageParam(role="assistant", content=response)
@@ -304,6 +323,21 @@ class FlowController:
 
             if should_end:
                 break
+
+            # ========== 处理过渡期逻辑 ==========
+            if self.manager.pending_end_count > 0:
+                # 当前在过渡期，减少计数
+                self.manager.pending_end_count -= 1
+                logger.debug(f"过渡期剩余轮数: {self.manager.pending_end_count}")
+
+                if self.manager.pending_end_count == 0:
+                    # 过渡期结束，真正结束对话
+                    logger.info("过渡期结束，结束对话（非交互式）")
+                    output.append("")
+                    output.append("---")
+                    output.append("")
+                    output.append("✅ 对话已结束（过渡期结束）")
+                    break
 
             # 提取响应文本（用于检测下一轮的搜索请求）
             # turn_output 格式: ["### [Agent Name]", "response text", "", ...]
@@ -517,8 +551,8 @@ class FlowController:
             )
             console.print()  # 进度后换行
 
-            # 检测对话结束标记（传入 messages 用于智能分析）
-            end_result = self.manager.end_detector.detect(
+            # 检测对话结束标记（使用 AI 分析）
+            end_result = await self.manager.end_detector.detect_async(
                 response, current_turn=self.manager.turn, messages=self.manager.messages
             )
             if end_result.detected:
@@ -554,6 +588,12 @@ class FlowController:
 
         # 切换到下一个智能体
         self.manager.current = 1 - self.manager.current
+
+        # ========== 处理过渡期逻辑 ==========
+        if self.manager.pending_end_count > 0:
+            # 当前在过渡期，减少计数
+            self.manager.pending_end_count -= 1
+            logger.debug(f"过渡期剩余轮数: {self.manager.pending_end_count}")
 
         # ========== 检查过渡期是否结束 ==========
         # 如果 pending_end_count == 0 且之前设置了过渡（通过检查是否被确认标记）

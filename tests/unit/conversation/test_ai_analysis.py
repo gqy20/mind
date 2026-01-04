@@ -4,7 +4,7 @@
 """
 
 from dataclasses import dataclass
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -46,6 +46,9 @@ class TestAIAnalysis:
         )
         detector = ConversationEndDetector(config)
 
+        # 设置 mock client（避免 detect_async 中的 client 检查失败）
+        detector._client = MagicMock()  # 只需要存在，不会被实际调用
+
         # 模拟 AI 返回高分分析
         mock_analysis = AnalysisResult(
             should_end=True,
@@ -66,8 +69,8 @@ class TestAIAnalysis:
         # 准备测试消息（模拟 10 轮对话）
         messages = [{"role": "user", "content": f"轮次 {i}"} for i in range(1, 12)]
 
-        # 测试检测
-        result = detector.detect(
+        # 测试检测（使用异步方法）
+        result = await detector.detect_async(
             response="<!-- END -->", current_turn=11, messages=messages
         )
 
@@ -110,8 +113,8 @@ class TestAIAnalysis:
         # 准备测试消息
         messages = [{"role": "user", "content": f"轮次 {i}"} for i in range(1, 12)]
 
-        # 测试检测
-        result = detector.detect(
+        # 测试检测（使用异步方法）
+        result = await detector.detect_async(
             response="<!-- END -->", current_turn=11, messages=messages
         )
 
@@ -131,6 +134,9 @@ class TestAIAnalysis:
         )
         detector = ConversationEndDetector(config)
 
+        # 设置 mock client（避免 detect_async 中的 client 检查失败）
+        detector._client = MagicMock()
+
         # 模拟完整的评分分析
         mock_analysis = AnalysisResult(
             should_end=True,
@@ -149,17 +155,18 @@ class TestAIAnalysis:
 
         messages = [{"role": "user", "content": "测试"} for _ in range(10)]
 
-        result = detector.detect(
+        result = await detector.detect_async(
             response="<!-- END -->", current_turn=10, messages=messages
         )
 
         # 验证分析结果包含评分
         assert result.detected is True
-        assert result.reason == "对话达成明确共识，观点充分表达"
+        # 原因会加上 "显式标记 + " 前缀
+        assert "对话达成明确共识，观点充分表达" in result.reason
 
     @pytest.mark.asyncio
-    async def test_ai_analysis_with_conversable_client(self):
-        """测试使用真实的 ConversableClient 进行 AI 分析"""
+    async def test_ai_analysis_method_exists(self):
+        """测试 _analyze_by_ai 方法存在且可调用"""
         from mind.conversation.ending_detector import (
             ConversationEndConfig,
             ConversationEndDetector,
@@ -171,19 +178,17 @@ class TestAIAnalysis:
             analysis_end_threshold=70,
         )
 
-        # Mock AnthropicClient
-        mock_client = MagicMock()
-        mock_client.send_message = AsyncMock(return_value="分析结果：对话已达成共识")
-
         detector = ConversationEndDetector(config)
-        detector._client = mock_client
 
-        messages = [
-            {"role": "assistant", "content": "我同意你的观点"},
-            {"role": "assistant", "content": "我也同意"},
-            {"role": "assistant", "content": "达成共识"},
-        ]
+        # 验证方法存在
+        assert hasattr(detector, "_analyze_by_ai")
+        assert callable(detector._analyze_by_ai)
 
-        # 这个测试会失败，因为 _analyze_by_ai 方法还不存在
-        with pytest.raises(AttributeError):
-            await detector._analyze_by_ai(messages, current_turn=3)
+        # 由于没有提供 client，调用会因为轮次不足而返回默认结果
+        messages = [{"role": "assistant", "content": "测试"}]
+        result = await detector._analyze_by_ai(messages, current_turn=1)
+
+        # 验证返回结果
+        assert result.should_end is False
+        assert result.score == 0
+        assert "轮次不足" in result.reason
