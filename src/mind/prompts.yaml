@@ -157,25 +157,33 @@ settings:
     enable_tools: true
     enable_search: true
 
-    # MCP 服务器配置（可选）
-    # 示例：使用 SDK 原生的 mcp_servers 配置
-    # mcp_servers:
-    #   knowledge:
-    #     command: node
-    #     args:
-    #       - /path/to/knowledge-mcp/index.js
-    #     env:
-    #       NODE_ENV: production
-    #   code-analysis:
-    #     command: python
-    #     args:
-    #       - -m
-    #       - code_analysis_mcp
-    #   web-search:
-    #     command: python
-    #     args:
-    #       - -m
-    #       - web_search_mcp
+    # MCP 服务器配置
+    # 环境变量使用 ${VAR_NAME} 格式，启动前需要设置对应的环境变量
+    mcp_servers:
+      article-mcp:
+        command: uvx
+        args: ["article-mcp"]
+        env:
+          # 使用环境变量，启动前设置: export EASYSCHOLAR_SECRET_KEY=your_key
+          EASYSCHOLAR_SECRET_KEY: "${EASYSCHOLAR_SECRET_KEY}"
+
+    # 更多 MCP 服务器示例（已注释）
+    # knowledge:
+    #   command: node
+    #   args:
+    #     - /path/to/knowledge-mcp/index.js
+    #   env:
+    #     NODE_ENV: production
+    # code-analysis:
+    #   command: python
+    #   args:
+    #     - -m
+    #     - code_analysis_mcp
+    # web-search:
+    #   command: python
+    #   args:
+    #     - -m
+    #     - web_search_mcp
 
     # Hook 配置（可选）
     # 示例：配置工具调用前后的 Hook 回调

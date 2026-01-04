@@ -192,6 +192,10 @@ async def main():
         enable_search=enable_search,
     )
 
+    # 设置 SDK 工具（MCP 服务器和 Hooks）
+    manager._setup_sdk_tools(settings)
+    logger.info("SDK 工具设置完成")
+
     # 获取主题
     topic = args.topic
     if not topic:

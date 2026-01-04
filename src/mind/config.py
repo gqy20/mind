@@ -3,10 +3,48 @@
 从 YAML 文件加载智能体提示词配置和系统设置。
 """
 
+import os
+import re
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _expand_env_vars(value: str) -> str:
+    """展开环境变量 ${VAR_NAME} 为实际值
+
+    Args:
+        value: 可能包含环境变量引用的字符串
+
+    Returns:
+        展开后的字符串
+
+    Raises:
+        ValueError: 环境变量未定义
+
+    Examples:
+        >>> os.environ['TEST'] = 'value'
+        >>> _expand_env_vars('${TEST}')
+        'value'
+        >>> _expand_env_vars('prefix_${TEST}_suffix')
+        'prefix_value_suffix'
+    """
+    if not isinstance(value, str):
+        return value
+
+    # 匹配 ${VAR_NAME} 格式
+    pattern = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
+
+    def replace_var(match: re.Match[str]) -> str:
+        var_name = match.group(1)
+        if var_name not in os.environ:
+            raise ValueError(
+                f"环境变量 '{var_name}' 未定义，请在启动前设置: export {var_name}=..."
+            )
+        return os.environ[var_name]
+
+    return pattern.sub(replace_var, value)
 
 
 class AgentConfig(BaseModel):
@@ -43,6 +81,22 @@ class MCPServerConfig(BaseModel):
     command: str = Field(..., description="服务器启动命令")
     args: list[str] = Field(default_factory=list, description="命令参数")
     env: dict[str, str] = Field(default_factory=dict, description="环境变量")
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def expand_env_values(cls, value: dict[str, str] | None) -> dict[str, str]:
+        """展开环境变量字典中的 ${VAR_NAME} 引用"""
+        if not value:
+            return {}
+
+        expanded = {}
+        for key, val in value.items():
+            try:
+                expanded[key] = _expand_env_vars(val)
+            except ValueError:
+                # 保持原值，让错误在实际使用时抛出
+                expanded[key] = val
+        return expanded
 
 
 class HookConfig(BaseModel):
