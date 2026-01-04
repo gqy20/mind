@@ -236,3 +236,53 @@ class TestSearchHandler:
 
         # 应该跳过所有轮次标记，使用真实的用户消息
         assert query == "什么是同倍体杂交？"
+
+    def test_extract_search_query_skips_tool_analysis_result(self):
+        """测试跳过工具分析结果（上下文更新）"""
+        from mind.conversation.search_handler import SearchHandler
+
+        manager = MagicMock()
+        manager.configure_mock(
+            messages=[
+                # 最新的消息是工具分析结果
+                {
+                    "role": "user",
+                    "content": (
+                        "[上下文更新]\n**对话轮次**: 5 轮交流\n**主要观点**: ..."
+                    ),
+                },
+                # 之前的消息是真实用户消息
+                {"role": "user", "content": "同倍体杂交物种形成的研究进展"},
+            ],
+            topic=None,
+        )
+
+        handler = SearchHandler(manager)
+        query = handler.extract_search_query()
+
+        # 应该跳过工具分析结果，使用真实的用户消息
+        assert query == "同倍体杂交物种形成的研究进展"
+
+    def test_extract_search_query_skips_system_message(self):
+        """测试跳过系统消息"""
+        from mind.conversation.search_handler import SearchHandler
+
+        manager = MagicMock()
+        manager.configure_mock(
+            messages=[
+                # 最新的消息是系统消息
+                {
+                    "role": "user",
+                    "content": "[系统消息 - 网络搜索结果]\n搜索结果...",
+                },
+                # 之前的消息是真实用户消息
+                {"role": "user", "content": "量子计算的最新突破"},
+            ],
+            topic=None,
+        )
+
+        handler = SearchHandler(manager)
+        query = handler.extract_search_query()
+
+        # 应该跳过系统消息，使用真实的用户消息
+        assert query == "量子计算的最新突破"

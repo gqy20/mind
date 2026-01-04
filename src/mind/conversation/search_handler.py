@@ -48,6 +48,12 @@ class SearchHandler:
                         if clean_query.startswith("现在由 ") and " 发言" in clean_query:
                             continue
 
+                        # 移除工具分析结果（上下文更新等）
+                        if clean_query.startswith(
+                            "[上下文更新]"
+                        ) or clean_query.startswith("[系统消息"):
+                            continue
+
                         # 移除常见的命令前缀
                         for prefix in ["/quit", "/exit", "/clear"]:
                             if clean_query.startswith(prefix):
