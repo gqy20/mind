@@ -169,8 +169,7 @@ class TestFlowController:
         assert len(manager.messages) == 2
         # 验证轮次标记是第一条消息
         assert manager.messages[0]["role"] == "user"
-        assert "[轮次 1]" in manager.messages[0]["content"]
-        assert "AgentA" in manager.messages[0]["content"]
+        assert "现在由 AgentA 发言" == manager.messages[0]["content"]
         # 验证响应是第二条消息
         assert manager.messages[1]["role"] == "assistant"
         assert manager.messages[1]["content"] == "AI 响应内容"

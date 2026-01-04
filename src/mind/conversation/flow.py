@@ -157,7 +157,7 @@ class FlowController:
         next_turn = self.manager.turn + 1
         turn_marker = MessageParam(
             role="user",
-            content=f"[轮次 {next_turn}] 现在由 {agent.name} 发言",
+            content=f"现在由 {agent.name} 发言",
         )
         self.manager.messages.append(turn_marker)
         self.manager.memory.add_message(
@@ -179,6 +179,13 @@ class FlowController:
                 output.extend(citations_lines)
 
         output.append("")
+        output.append("")
+        # 打印分隔线，显示轮数
+        line_text = f" 第 {next_turn} 轮 "
+        line_length = len(line_text)
+        dashes = "-" * ((60 - line_length) // 2)
+        output.append(f"{dashes}{line_text}{dashes}")
+        output.append("")
 
         # 检测对话结束标记（使用 AI 分析）
         end_result = await self.manager.end_detector.detect_async(
@@ -187,21 +194,16 @@ class FlowController:
         if end_result.detected:
             if end_result.transition > 0:
                 # 需要过渡轮数
-                self.manager.pending_end_count = end_result.transition
-                # 设置过渡激活标记（用于检测过渡期结束）
-                self.manager._pending_end_active = True
-                logger.info(
-                    f"{agent.name} 请求结束对话（非交互式），"
-                    f"进入过渡期（{end_result.transition} 轮）"
+                should_end, message = self._handle_transition_period(
+                    agent.name, end_result.transition
                 )
-                output.append("")
-                output.append("---")
-                output.append("")
-                output.append(
-                    f"📢 [系统] {agent.name} 建议结束对话，"
-                    f"将进行 {end_result.transition} 轮过渡对话..."
-                )
-                # 继续对话（不立即结束）
+                if message:
+                    output.append("")
+                    output.append("---")
+                    output.append("")
+                    output.append(message)
+                if should_end:
+                    return output, True
             else:
                 # 立即结束（无过渡轮数）
                 logger.info(f"{agent.name} 请求结束对话（非交互式）")
@@ -389,7 +391,11 @@ class FlowController:
             and self.manager.turn % self.manager.tool_interval == 0
             and self.manager.turn > 0
         ):
+            # 本地对话分析（不是网络搜索）
+            msg = "\n📋 [分析对话] 正在查看当前对话上下文..."
+            console.print(msg, end="")
             tool_result = await agent.query_tool("总结当前对话", self.manager.messages)
+            console.print(" ✅")
             if tool_result:
                 # 将工具结果注入到对话历史
                 tool_message = MessageParam(
@@ -467,6 +473,14 @@ class FlowController:
                     pass
 
         console.print()  # 换行
+        console.print()  # 分隔线前再加一个空行
+        # 打印分隔线，明确回答结束，并显示轮数
+        turn_num = self.manager.turn + 1  # 当前轮次（还未递增）
+        line_text = f" 第 {turn_num} 轮 "
+        line_length = len(line_text)
+        dashes = "-" * ((60 - line_length) // 2)
+        console.print(f"{dashes}{line_text}{dashes}")
+        console.print()  # 分隔线后再换行
 
         if response is None:
             return None
@@ -515,7 +529,7 @@ class FlowController:
         next_turn = self.manager.turn + 1
         turn_marker = MessageParam(
             role="user",
-            content=f"[轮次 {next_turn}] 现在由 {current_agent.name} 发言",
+            content=f"现在由 {current_agent.name} 发言",
         )
         self.manager.messages.append(turn_marker)
         self.manager.memory.add_message(
@@ -558,17 +572,13 @@ class FlowController:
             if end_result.detected:
                 if end_result.transition > 0:
                     # 需要过渡轮数
-                    self.manager.pending_end_count = end_result.transition
-                    # 设置过渡激活标记（用于检测过渡期结束）
-                    self.manager._pending_end_active = True
-                    logger.info(
-                        f"{current_agent.name} 请求结束对话，"
-                        f"进入过渡期（{end_result.transition} 轮）"
+                    should_end, message = self._handle_transition_period(
+                        current_agent.name, end_result.transition
                     )
-                    console.print(
-                        f"\n📢 [系统] {current_agent.name} 建议结束对话，"
-                        f"将进行 {end_result.transition} 轮过渡对话..."
-                    )
+                    if message:
+                        console.print(f"\n{message}")
+                    if should_end:
+                        return  # 结束本轮
                 else:
                     # 立即结束（兼容旧行为）
                     logger.info(f"{current_agent.name} 请求结束对话")
@@ -589,12 +599,6 @@ class FlowController:
         # 切换到下一个智能体
         self.manager.current = 1 - self.manager.current
 
-        # ========== 处理过渡期逻辑 ==========
-        if self.manager.pending_end_count > 0:
-            # 当前在过渡期，减少计数
-            self.manager.pending_end_count -= 1
-            logger.debug(f"过渡期剩余轮数: {self.manager.pending_end_count}")
-
         # ========== 检查过渡期是否结束 ==========
         # 如果 pending_end_count == 0 且之前设置了过渡（通过检查是否被确认标记）
         # 我们需要在过渡期结束后真正结束对话
@@ -608,18 +612,51 @@ class FlowController:
             # 这里会在主循环中被处理，因为 is_running 会被设置
             await self._handle_transition_end()
 
+    def _handle_transition_period(
+        self, agent_name: str, transition: int
+    ) -> tuple[bool, str | None]:
+        """处理过渡期逻辑
+
+        统一处理交互式和非交互式模式的过渡期设置，
+        防止在过渡期中重复触发结束检测。
+
+        Args:
+            agent_name: 当前智能体名称
+            transition: 过渡轮数
+
+        Returns:
+            (should_end, message): 是否应该结束对话，以及要显示的消息
+        """
+        # 只有在不在过渡期时才设置新的过渡期，防止重复触发
+        # 使用 _pending_end_active 标记，表示过渡期已被激活
+        if not self.manager._pending_end_active:
+            self.manager.pending_end_count = transition
+            # 设置过渡激活标记（用于检测过渡期结束）
+            self.manager._pending_end_active = True
+            logger.info(f"{agent_name} 请求结束对话，进入过渡期（{transition} 轮）")
+            msg = (
+                f"📢 [系统] {agent_name} 建议结束对话，"
+                f"将进行 {transition} 轮过渡对话..."
+            )
+            return False, msg
+        else:
+            # 已在过渡期或过渡期已激活，忽略新的结束检测
+            remaining = self.manager.pending_end_count
+            logger.debug(
+                f"过渡期已激活（剩余 {remaining} 轮），忽略 {agent_name} 的结束标记",
+            )
+            return False, None
+
     async def _handle_transition_end(self):
         """处理过渡期结束
 
         非交互模式：直接结束
         交互模式：提示用户确认
         """
-        # 清除过渡标记
-        if hasattr(self.manager, "_pending_end_active"):
-            self.manager._pending_end_active = False
-
         # 非交互模式：直接通过 ending_handler 处理
         if not hasattr(self, "_is_interactive") or not self._is_interactive:
+            # 非交互模式：不清除 _pending_end_active 标记，防止重新触发
+            # 这样可以确保过渡期结束后不会因为检测到 END 标记而重新设置过渡期
             # 生成总结
             summary = await self.manager._summarize_conversation()
             self.manager.summary = summary
@@ -665,6 +702,10 @@ class FlowController:
                 # 用户想继续
                 logger.info("用户选择继续对话（过渡期结束）")
 
+                # 重置过渡标记，允许稍后再次触发结束检测
+                if hasattr(self.manager, "_pending_end_active"):
+                    self.manager._pending_end_active = False
+
                 # 将用户输入添加到对话历史
                 msg = MessageParam(role="user", content=user_input)
                 self.manager.messages.append(msg)
@@ -687,7 +728,7 @@ class FlowController:
         from mind.tools.search_tool import search_web
 
         logger.info(f"第 {self.manager.turn} 轮：触发网络搜索")
-        msg = f"\n🌐 [网络搜索] 第 {self.manager.turn} 轮：正在搜索 '{query}'..."
+        msg = f"\n🔍 [搜索] 正在搜索 '{query}'..."
 
         search_result = await search_web(query, max_results=3)
 
@@ -731,7 +772,7 @@ class FlowController:
     async def _execute_search_interactive(self, query: str):
         """交互模式下执行搜索"""
         print(
-            f"\n🌐 [网络搜索] 第 {self.manager.turn} 轮：正在搜索 '{query}'...",
+            f"\n🔍 [搜索] 正在搜索 '{query}'...",
             end="",
             flush=True,
         )
@@ -754,7 +795,7 @@ class FlowController:
         """执行 AI 主动请求的搜索"""
         logger.info(f"AI 主动请求搜索: {query}")
         print(
-            f"\n🔍 [AI 请求] 正在搜索 '{query}'...",
+            f"\n🔍 [搜索] 正在搜索 '{query}'...",
             end="",
             flush=True,
         )
