@@ -11,6 +11,7 @@ ConversationManager 工具结果注入功能的单元测试
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from anthropic import AsyncAnthropic
 
 from mind.agents.agent import Agent
 from mind.manager import ConversationManager
@@ -25,6 +26,11 @@ class TestToolInjectionConfig:
         agent_a = MagicMock(spec=Agent)
         agent_a.name = "AgentA"
         agent_a.tool_agent = None
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
+
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
         agent_b.tool_agent = None
@@ -43,6 +49,11 @@ class TestToolInjectionConfig:
         agent_a = MagicMock(spec=Agent)
         agent_a.name = "AgentA"
         agent_a.tool_agent = None
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
+
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
         agent_b.tool_agent = None
@@ -64,6 +75,11 @@ class TestToolInjectionConfig:
         agent_a = MagicMock(spec=Agent)
         agent_a.name = "AgentA"
         agent_a.tool_agent = None
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
+
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
         agent_b.tool_agent = None
@@ -92,6 +108,10 @@ class TestToolInjectionInTurn:
         agent_a.respond = AsyncMock(return_value="响应")
         # Mock query_tool 方法
         agent_a.query_tool = AsyncMock(return_value="工具结果")
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -115,6 +135,10 @@ class TestToolInjectionInTurn:
         agent_a.respond = AsyncMock(return_value="响应")
         # Mock query_tool 方法
         agent_a.query_tool = AsyncMock(return_value="工具结果")
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -139,6 +163,10 @@ class TestToolInjectionInTurn:
         agent_a.respond = AsyncMock(return_value="响应")
         # Mock query_tool 方法返回工具结果
         agent_a.query_tool = AsyncMock(return_value="代码库分析结果")
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -169,6 +197,10 @@ class TestToolInjectionInTurn:
         agent_a.respond = AsyncMock(return_value="响应")
         # Mock query_tool 方法返回对话摘要
         agent_a.query_tool = AsyncMock(return_value="对话摘要")
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -186,7 +218,8 @@ class TestToolInjectionInTurn:
         assert len(manager.messages) == initial_message_count + 3
         # 倒数第三条是轮次标记
         assert manager.messages[-3]["role"] == "user"
-        assert "[轮次" in manager.messages[-3]["content"]
+        assert "现在由" in manager.messages[-3]["content"]
+        assert "发言" in manager.messages[-3]["content"]
         # 倒数第二条是工具结果
         tool_message = manager.messages[-2]
         assert tool_message["role"] == "user"
@@ -204,6 +237,10 @@ class TestToolInjectionInTurn:
         agent_a.respond = AsyncMock(return_value="响应")
         # Mock query_tool 方法返回对话摘要
         agent_a.query_tool = AsyncMock(return_value="对话摘要")
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -236,6 +273,10 @@ class TestToolInjectionInTurn:
         agent_a = MagicMock(spec=Agent)
         agent_a.name = "AgentA"
         agent_a.respond = AsyncMock(return_value="响应")
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -260,6 +301,10 @@ class TestToolInjectionInTurn:
         agent_a.respond = AsyncMock(return_value="响应")
         # Mock query_tool 方法返回 None（表示失败）
         agent_a.query_tool = AsyncMock(return_value=None)
+        # 添加 mock client 属性
+        mock_client = MagicMock(spec=AsyncAnthropic)
+        agent_a.client = MagicMock()
+        agent_a.client.client = mock_client
 
         agent_b = MagicMock(spec=Agent)
         agent_b.name = "AgentB"
@@ -277,6 +322,7 @@ class TestToolInjectionInTurn:
         assert len(manager.messages) == initial_message_count + 2
         # 倒数第二条应该是轮次标记（user role）
         assert manager.messages[-2]["role"] == "user"
-        assert "[轮次" in manager.messages[-2]["content"]
+        assert "现在由" in manager.messages[-2]["content"]
+        assert "发言" in manager.messages[-2]["content"]
         # 最后一条应该是响应（assistant role）
         assert manager.messages[-1]["role"] == "assistant"

@@ -163,7 +163,8 @@ class TestConversationManagerMessageFormat:
         assert manager.messages[0]["content"] == "主题"
         # messages[1] 是轮次标记
         assert manager.messages[1]["role"] == "user"
-        assert "[轮次 1]" in manager.messages[1]["content"]
+        assert "现在由" in manager.messages[1]["content"]
+        assert "发言" in manager.messages[1]["content"]
         assert "支持者" in manager.messages[1]["content"]
         # messages[2] 是响应（不添加前缀，由提示词约束保证）
         assert manager.messages[2]["role"] == "assistant"
@@ -188,13 +189,15 @@ class TestConversationManagerMessageFormat:
         assert len(manager.messages) == 5  # 主题 + 轮次1 + 响应1 + 轮次2 + 响应2
         # 轮次 1 标记
         assert manager.messages[1]["role"] == "user"
-        assert "[轮次 1]" in manager.messages[1]["content"]
+        assert "现在由" in manager.messages[1]["content"]
+        assert "发言" in manager.messages[1]["content"]
         assert "支持者" in manager.messages[1]["content"]
         # 响应 1（不添加前缀）
         assert manager.messages[2]["content"] == "支持观点"
         # 轮次 2 标记
         assert manager.messages[3]["role"] == "user"
-        assert "[轮次 2]" in manager.messages[3]["content"]
+        assert "现在由" in manager.messages[3]["content"]
+        assert "发言" in manager.messages[3]["content"]
         assert "挑战者" in manager.messages[3]["content"]
         # 响应 2（不添加前缀）
         assert manager.messages[4]["content"] == "挑战观点"
@@ -281,7 +284,8 @@ class TestConversationManagerTurn:
             assert len(manager.messages) == initial_count + 1
             # 新增的消息是轮次标记
             assert manager.messages[-1]["role"] == "user"
-            assert "[轮次 1]" in manager.messages[-1]["content"]
+            assert "现在由" in manager.messages[-1]["content"]
+            assert "发言" in manager.messages[-1]["content"]
 
 
 class TestConversationManagerAutoExit:
