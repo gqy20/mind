@@ -44,6 +44,10 @@ tmp/
 logs/
 history/
 
+# Environment variables
+.env
+.env.local
+
 # uv
 uv.lock
 

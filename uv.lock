@@ -739,6 +739,7 @@ dependencies = [
     { name = "ddgs" },
     { name = "loguru" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -762,6 +763,7 @@ requires-dist = [
     { name = "ddgs", specifier = ">=9.0.0" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
 ]

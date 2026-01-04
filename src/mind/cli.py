@@ -15,6 +15,8 @@ import argparse
 import asyncio
 import os
 
+from dotenv import load_dotenv
+
 from mind.agents.agent import DEFAULT_MODEL, Agent
 from mind.config import get_default_config_path, load_all_configs
 from mind.logger import get_logger
@@ -109,6 +111,8 @@ def parse_args() -> argparse.Namespace:
 
 async def main():
     """主函数 - 配置并启动双智能体对话"""
+    # 加载 .env 文件中的环境变量
+    load_dotenv()
 
     args = parse_args()
 
@@ -224,9 +228,14 @@ async def main():
     logger.info("程序正常退出")
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """同步入口函数 - 供 uv run 调用"""
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("用户通过 Ctrl+C 中断程序")
         print("\n\n👋 对话已结束")
+
+
+if __name__ == "__main__":
+    run()

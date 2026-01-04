@@ -30,6 +30,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "pyyaml>=6.0.0",
     "ddgs>=9.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]
@@ -49,7 +50,7 @@ Homepage = "https://github.com/gqy20/mind"
 Repository = "https://github.com/gqy20/mind.git"
 
 [project.scripts]
-mind = "mind.cli:main"
+mind = "mind.cli:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mind"]
