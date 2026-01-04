@@ -61,6 +61,7 @@ class AnthropicClient:
         tools: list[ToolParam] | None = None,
         documents: list | None = None,
         stop_tokens: list[str] | None = None,
+        omit_tools: bool = False,
     ) -> AsyncIterator["Event"]:
         """流式生成 - 返回原始事件流
 
@@ -70,6 +71,7 @@ class AnthropicClient:
             tools: 可用的工具定义
             documents: Citations API 文档列表
             stop_tokens: 停止序列，遇到这些标记时停止生成
+            omit_tools: 是否完全省略 tools 参数（用于禁止工具调用）
 
         Yields:
             API 返回的原始事件
@@ -80,8 +82,11 @@ class AnthropicClient:
             "max_tokens": 2048,
             "system": system,
             "messages": messages,
-            "tools": tools or [],
         }
+
+        # 只有在 omit_tools=False 时才添加 tools 参数
+        if not omit_tools:
+            kwargs["tools"] = tools or []
 
         # 只有在有 documents 时才添加该参数
         if documents:

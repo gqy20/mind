@@ -380,7 +380,7 @@ class ResponseHandler:
         if citations_buffer:
             display_citations(citations_buffer)
 
-        # 方案 A：禁止在继续生成时执行搜索，避免死循环
+        # 检测工具调用
         if tool_use_buffer:
             tool_names = [tc.get("name", "") for tc in tool_use_buffer]
             names_str = ", ".join(tool_names)
@@ -388,8 +388,96 @@ class ResponseHandler:
                 f"继续生成时检测到 {len(tool_use_buffer)} 个工具调用 ({names_str})，"
                 f"忽略以避免搜索循环。AI 应在输出前完成所有搜索。"
             )
-            # 不执行工具，直接返回已生成的响应
 
+            # 方案 B：如果响应为空且有工具调用，触发重试机制
+            if not response_text:
+                return await self._retry_without_tools(messages, system, interrupt)
+
+        return response_text
+
+    async def _retry_without_tools(
+        self, messages: list["MessageParam"], system: str, interrupt: asyncio.Event
+    ) -> str:
+        """重试响应时不允许工具调用
+
+        当 AI 在继续生成时只调用工具而不输出内容，调用此方法重试一次。
+        重试时不传入 tools 参数，强制 AI 输出内容。
+
+        Args:
+            messages: 对话历史
+            system: 系统提示词
+            interrupt: 中断事件
+
+        Returns:
+            重试后的响应文本
+        """
+        # 检查是否已经重试过
+        if not hasattr(self, "_empty_retry_count"):
+            self._empty_retry_count = 0
+
+        # 最多重试 1 次
+        if self._empty_retry_count >= 1:
+            logger.warning("已达到最大重试次数（1 次），返回空响应")
+            self._empty_retry_count = 0  # 重置计数器
+            return ""
+
+        self._empty_retry_count += 1
+        logger.info("检测到空响应，进行第 1 次重试（禁止工具调用）...")
+
+        # 增强系统提示词，明确要求 AI 输出内容
+        enhanced_system = (
+            system
+            + "\n\n注意：搜索已完成，请直接基于已有结果输出回答内容，不要调用任何工具。"
+        )
+
+        response_text = ""
+        has_text_delta = False
+        citations_buffer: list[dict] = []
+
+        # 获取 documents 列表（用于 Citations API）
+        docs_list = self.documents.documents if self.documents else None
+
+        try:
+            # 关键：使用 omit_tools=True 禁止工具调用
+            async for event in self.client.stream(
+                messages=messages,
+                system=enhanced_system,
+                tools=None,
+                omit_tools=True,  # 完全省略 tools 参数
+                documents=docs_list,
+                stop_tokens=self.stop_tokens,
+            ):
+                if interrupt.is_set():
+                    logger.debug(f"智能体 {self.name} 重试响应被中断")
+                    return response_text
+
+                # 处理 content_block_delta 事件（新格式）
+                if event.type == "content_block_delta":
+                    response_text, has_text_delta, new_citations = (
+                        self._handle_content_block_delta(
+                            event, response_text, has_text_delta
+                        )
+                    )
+                    citations_buffer.extend(new_citations)
+
+                # 处理 text 事件（旧格式）
+                elif event.type == "text":
+                    response_text, has_text_delta = self._handle_text_event(
+                        event, response_text, has_text_delta
+                    )
+
+        except Exception as e:
+            logger.exception(f"重试响应出错: {e}")
+            return response_text
+        finally:
+            # 重置计数器，为下次响应做准备
+            self._empty_retry_count = 0
+
+        # 显示引用列表（如果有）
+        if citations_buffer:
+            display_citations(citations_buffer)
+
+        logger.info(f"重试完成，生成响应长度: {len(response_text)}")
         return response_text
 
     async def _execute_tools_parallel(
