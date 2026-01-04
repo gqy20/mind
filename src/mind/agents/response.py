@@ -375,20 +375,15 @@ class ResponseHandler:
         if citations_buffer:
             display_citations(citations_buffer)
 
-        # 如果在继续生成时有新的工具调用，执行它们
+        # 方案 A：禁止在继续生成时执行搜索，避免死循环
         if tool_use_buffer:
-            logger.info(f"继续生成时检测到 {len(tool_use_buffer)} 个工具调用")
-            for tool_call in tool_use_buffer:
-                if tool_call["name"] == "search_web":
-                    query = tool_call["input"].get("query", "")
-                    if query:
-                        result = await self._execute_tool_search(
-                            tool_call, messages, interrupt
-                        )
-                        if result:
-                            response_text += result
-                else:
-                    logger.warning(f"未知工具: {tool_call['name']}")
+            tool_names = [tc.get("name", "") for tc in tool_use_buffer]
+            names_str = ", ".join(tool_names)
+            logger.warning(
+                f"继续生成时检测到 {len(tool_use_buffer)} 个工具调用 ({names_str})，"
+                f"忽略以避免搜索循环。AI 应在输出前完成所有搜索。"
+            )
+            # 不执行工具，直接返回已生成的响应
 
         return response_text
 
