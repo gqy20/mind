@@ -11,6 +11,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_agent_uses_tool_for_search():
     """测试 AI 使用工具调用而不是文本标记请求搜索"""
+    from mind.agents.client import AnthropicClient
     from mind.agents.response import ResponseHandler
 
     # Mock 事件流：AI 调用 search_web 工具
@@ -40,29 +41,29 @@ async def test_agent_uses_tool_for_search():
     mock_stream.__aenter__ = AsyncMock(return_value=mock_iter())
     mock_stream.__aexit__ = AsyncMock(return_value=None)
 
-    mock_anthropic = MagicMock()
-    stream_call = MagicMock()
-    stream_call.__aenter__ = AsyncMock(return_value=mock_iter())
-    stream_call.__aexit__ = AsyncMock(return_value=None)
-    mock_anthropic.messages.stream = MagicMock(return_value=stream_call)
+    # 创建 Mock 客户端
+    mock_client = MagicMock(spec=AnthropicClient)
+    mock_client.stream = AsyncMock(return_value=mock_stream)
+    mock_client.model = "test-model"
 
-    with patch("mind.agents.client.AsyncAnthropic", return_value=mock_anthropic):
-        from mind.agents.client import AnthropicClient
+    # Mock 搜索执行避免实际调用
+    with patch.object(ResponseHandler, "_execute_tool_search", return_value="搜索结果"):
+        handler = ResponseHandler(mock_client)
 
-        client = AnthropicClient(model="test-model", api_key="test-key")
-        client.model = "test-model"
-        client.client = mock_anthropic
+        # 创建不会被中断的 interrupt mock
+        interrupt = MagicMock()
+        interrupt.is_set.return_value = False
 
-        handler = ResponseHandler(client)
         await handler.respond(
             messages=[{"role": "user", "content": "test"}],
             system="You are helpful",
-            interrupt=AsyncMock(),
+            interrupt=interrupt,
         )
 
-    # 验证工具调用被检测到
-    # 实际上工具调用会在后台执行，这里主要验证 tools 参数被传递
-    call_kwargs = mock_anthropic.messages.stream.call_args[1]
+    # 验证 stream 方法被调用
+    call_args = mock_client.stream.call_args
+    assert call_args is not None, "stream 方法应该被调用"
+    call_kwargs = call_args[1] if call_args else {}
     assert "tools" in call_kwargs
     assert len(call_kwargs["tools"]) > 0
     assert call_kwargs["tools"][0]["name"] == "search_web"
@@ -118,12 +119,15 @@ async def test_text_search_marker_not_displayed():
     # 注意：当前实现可能还没有过滤，这个测试会失败
     printed_text = " ".join(str(arg) for arg in captured_output)
     # 期望：搜索标记被过滤或工具调用被使用
-    assert "[搜索:" not in printed_text or "test" in result
+    assert "[搜索:" not in printed_text or (
+        result is not None and "test" in result.text
+    )
 
 
 @pytest.mark.asyncio
 async def test_tool_use_does_not_appear_in_response():
     """测试工具调用不会出现在响应文本中"""
+    from mind.agents.client import AnthropicClient
     from mind.agents.response import ResponseHandler
 
     # Mock 事件流：工具调用 + 文本输出
@@ -151,34 +155,38 @@ async def test_tool_use_does_not_appear_in_response():
     text_event.delta.text = "这是搜索后的回答"
     events.append(text_event)
 
-    async def mock_iter():
+    # stream() 返回 async iterator，不是 async context manager
+    async def mock_stream(**kwargs):
         for event in events:
             yield event
 
-    mock_stream = MagicMock()
-    mock_stream.__aenter__ = AsyncMock(return_value=mock_iter())
-    mock_stream.__aexit__ = AsyncMock(return_value=None)
+    # 创建 Mock 客户端 - stream 返回 async iterator
+    mock_client = MagicMock(spec=AnthropicClient)
+    mock_client.stream = mock_stream
+    mock_client.model = "test-model"
 
-    mock_anthropic = MagicMock()
-    mock_anthropic.messages.stream = MagicMock(return_value=mock_stream)
+    # 创建不会被中断的 interrupt mock
+    interrupt = MagicMock()
+    interrupt.is_set.return_value = False
 
-    with patch("mind.agents.client.AsyncAnthropic", return_value=mock_anthropic):
-        from mind.agents.client import AnthropicClient
+    # Mock print 来捕获输出 - 使用简单的列表
+    captured_prints = []
 
-        client = AnthropicClient(model="test-model", api_key="test-key")
-        client.client = mock_anthropic
+    def mock_print(*args, **kwargs):
+        captured_prints.append(" ".join(str(arg) for arg in args))
 
-        # Mock print 来捕获输出
-        captured_prints = []
-        with patch("builtins.print", side_effect=captured_prints.append):
-            handler = ResponseHandler(client)
-            # Mock 搜索执行
-            with patch.object(handler, "_execute_tool_search", return_value="搜索结果"):
-                result = await handler.respond(
-                    messages=[{"role": "user", "content": "test"}],
-                    system="You are helpful",
-                    interrupt=AsyncMock(),
-                )
+    with patch("builtins.print", side_effect=mock_print):
+        handler = ResponseHandler(mock_client)
+        # Mock 搜索执行
+        with patch.object(handler, "_execute_tool_search", return_value="搜索结果"):
+            result = await handler.respond(
+                messages=[{"role": "user", "content": "test"}],
+                system="You are helpful",
+                interrupt=interrupt,
+            )
+
+    # 验证有响应结果
+    assert result is not None, "应该返回响应结果（未被中断）"
 
     # 验证响应文本不包含工具调用的内容
     assert result.text == "这是搜索后的回答"
@@ -233,11 +241,20 @@ def test_tools_schema_correctly_defined():
     assert search_tool is not None
 
     # 验证工具参数
-    input_schema = search_tool.get("input_schema", {})
-    if isinstance(input_schema, dict):
-        assert "query" in input_schema.get("properties", {})
-        assert (
-            input_schema.get("properties", {}).get("query", {}).get("type") == "string"
+    if isinstance(search_tool, dict):
+        input_schema_raw = search_tool.get("input_schema", {})
+        input_schema = (
+            dict(input_schema_raw) if isinstance(input_schema_raw, dict) else {}
         )
-    elif hasattr(input_schema, "properties"):
-        assert "query" in input_schema.properties
+        props = input_schema.get("properties", {})
+        assert isinstance(props, dict) and "query" in props
+        query_type = props.get("query", {})
+        assert isinstance(query_type, dict) and query_type.get("type") == "string"
+    else:
+        # search_tool 是对象
+        input_schema_raw = getattr(search_tool, "input_schema", {})
+        input_schema = (
+            dict(input_schema_raw) if isinstance(input_schema_raw, dict) else {}
+        )
+        props = input_schema.get("properties", {})
+        assert isinstance(props, dict) and "query" in props
