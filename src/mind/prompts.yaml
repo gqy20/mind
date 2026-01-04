@@ -85,3 +85,32 @@ settings:
     tool_interval: 5
     enable_tools: true
     enable_search: true
+
+    # MCP 服务器配置（可选）
+    # 示例：使用 SDK 原生的 mcp_servers 配置
+    # mcp_servers:
+    #   knowledge:
+    #     command: node
+    #     args:
+    #       - /path/to/knowledge-mcp/index.js
+    #     env:
+    #       NODE_ENV: production
+    #   code-analysis:
+    #     command: python
+    #     args:
+    #       - -m
+    #       - code_analysis_mcp
+    #   web-search:
+    #     command: python
+    #     args:
+    #       - -m
+    #       - web_search_mcp
+
+    # Hook 配置（可选）
+    # 示例：配置工具调用前后的 Hook 回调
+    # pre_tool_use:
+    #   timeout: 30.0
+    #   enabled: true
+    # post_tool_use:
+    #   timeout: 30.0
+    #   enabled: true

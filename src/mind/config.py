@@ -37,12 +37,36 @@ class ConversationConfig(BaseModel):
     max_turns: int = Field(default=500, description="非交互模式最大轮数")
 
 
+class MCPServerConfig(BaseModel):
+    """MCP 服务器配置模型"""
+
+    command: str = Field(..., description="服务器启动命令")
+    args: list[str] = Field(default_factory=list, description="命令参数")
+    env: dict[str, str] = Field(default_factory=dict, description="环境变量")
+
+
+class HookConfig(BaseModel):
+    """Hook 配置模型"""
+
+    timeout: float = Field(default=30.0, description="Hook 超时时间（秒）")
+    enabled: bool = Field(default=True, description="是否启用 Hook")
+
+
 class ToolsConfig(BaseModel):
     """工具配置模型"""
 
     tool_interval: int = Field(default=5, description="工具调用间隔（轮数）")
     enable_tools: bool = Field(default=True, description="是否启用工具")
     enable_search: bool = Field(default=True, description="是否启用搜索")
+    mcp_servers: dict[str, MCPServerConfig] = Field(
+        default_factory=dict, description="MCP 服务器配置"
+    )
+    pre_tool_use: HookConfig | None = Field(
+        default=None, description="工具调用前 Hook 配置"
+    )
+    post_tool_use: HookConfig | None = Field(
+        default=None, description="工具调用后 Hook 配置"
+    )
 
 
 class SettingsConfig(BaseModel):

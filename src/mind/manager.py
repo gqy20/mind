@@ -16,12 +16,13 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from anthropic.types import MessageParam
 from rich.console import Console
 
 from mind.agents.agent import Agent
+from mind.config import SettingsConfig
 from mind.conversation.ending_detector import (
     ConversationEndConfig,
     ConversationEndDetector,
@@ -97,6 +98,8 @@ class ConversationManager:
     summarizer_agent: "SummarizerAgent | None" = field(default=None)
     # 流程控制器（延迟初始化）
     _flow_controller: "FlowController | None" = field(default=None, init=False)
+    # SDK 客户端（用于 MCP 服务器和 Hooks）
+    _sdk_client: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         """初始化后处理：配置工具智能体"""
@@ -148,6 +151,93 @@ class ConversationManager:
 
             self._flow_controller = FlowController(self)
         return self._flow_controller
+
+    def _setup_sdk_tools(self, settings: SettingsConfig) -> None:
+        """设置 SDK 工具（使用 SDK 原生的 mcp_servers 和 hooks 配置）
+
+        将配置中的 MCP 服务器和 Hook 设置转换为 SDK 格式。
+
+        Args:
+            settings: 系统设置配置
+        """
+        # 如果没有配置 MCP 服务器和 Hooks，跳过
+        if not settings.tools.mcp_servers and not any(
+            [settings.tools.pre_tool_use, settings.tools.post_tool_use]
+        ):
+            logger.debug("无 MCP 服务器或 Hook 配置，跳过 SDK 工具设置")
+            return
+
+        try:
+            from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        except ImportError:
+            logger.warning(
+                "claude-agent-sdk 未安装，跳过 SDK 工具设置。"
+                "安装命令: pip install claude-agent-sdk"
+            )
+            return
+
+        # 转换 MCP 服务器配置为 SDK 格式
+        mcp_servers = {}
+        for name, config in settings.tools.mcp_servers.items():
+            mcp_servers[name] = {
+                "command": config.command,
+                "args": config.args,
+                "env": config.env,
+            }
+
+        # 构建 Hooks 配置
+        hooks = self._build_hooks_config(settings)
+
+        # 创建 SDK 选项（SDK 配置类型复杂，使用字典简化）
+        options = ClaudeAgentOptions(
+            mcp_servers=mcp_servers if mcp_servers else None,  # type: ignore[arg-type]
+            hooks=hooks if hooks else None,
+        )
+
+        # 创建 SDK 客户端（存储但不自动连接）
+        self._sdk_client = ClaudeSDKClient(options=options)
+        logger.info(
+            f"SDK 工具已设置: {len(mcp_servers)} 个 MCP 服务器, "
+            f"{len(hooks)} 个 Hook 配置"
+        )
+
+    def _build_hooks_config(self, settings: SettingsConfig) -> dict:
+        """构建 Hooks 配置
+
+        Args:
+            settings: 系统设置配置
+
+        Returns:
+            Hooks 配置字典
+        """
+        from claude_agent_sdk.types import HookMatcher
+
+        from mind.tools.hooks import ToolHooks
+
+        hooks = {}
+        hook_manager = ToolHooks()
+
+        # PreToolUse Hook
+        if settings.tools.pre_tool_use and settings.tools.pre_tool_use.enabled:
+            hooks["PreToolUse"] = [
+                HookMatcher(
+                    matcher=None,
+                    hooks=[hook_manager.pre_tool_use],  # type: ignore[list-item]
+                    timeout=settings.tools.pre_tool_use.timeout,
+                )
+            ]
+
+        # PostToolUse Hook
+        if settings.tools.post_tool_use and settings.tools.post_tool_use.enabled:
+            hooks["PostToolUse"] = [
+                HookMatcher(
+                    matcher=None,
+                    hooks=[hook_manager.post_tool_use],  # type: ignore[list-item]
+                    timeout=settings.tools.post_tool_use.timeout,
+                )
+            ]
+
+        return hooks
 
     def save_conversation(self) -> Path:
         """保存对话到 JSON 文件
