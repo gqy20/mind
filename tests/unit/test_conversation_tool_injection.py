@@ -182,13 +182,18 @@ class TestToolInjectionInTurn:
         # Act
         await manager._turn()
 
-        # Assert - 应该有 2 条新消息（工具消息 + 响应消息）
-        assert len(manager.messages) == initial_message_count + 2
-        # 检查倒数第二条消息是工具结果（最后一条是响应）
+        # Assert - 应该有 3 条新消息（轮次标记 + 工具消息 + 响应消息）
+        assert len(manager.messages) == initial_message_count + 3
+        # 倒数第三条是轮次标记
+        assert manager.messages[-3]["role"] == "user"
+        assert "[轮次" in manager.messages[-3]["content"]
+        # 倒数第二条是工具结果
         tool_message = manager.messages[-2]
         assert tool_message["role"] == "user"
         assert "上下文更新" in tool_message["content"]
         assert "对话摘要" in tool_message["content"]
+        # 最后一条是响应
+        assert manager.messages[-1]["role"] == "assistant"
 
     @pytest.mark.asyncio
     async def test_tool_result_saved_to_memory(self):
@@ -268,7 +273,10 @@ class TestToolInjectionInTurn:
         # Act
         await manager._turn()
 
-        # Assert - 应该只有响应消息，没有工具消息
-        assert len(manager.messages) == initial_message_count + 1
+        # Assert - 应该只有轮次标记和响应消息，没有工具消息
+        assert len(manager.messages) == initial_message_count + 2
+        # 倒数第二条应该是轮次标记（user role）
+        assert manager.messages[-2]["role"] == "user"
+        assert "[轮次" in manager.messages[-2]["content"]
         # 最后一条应该是响应（assistant role）
         assert manager.messages[-1]["role"] == "assistant"

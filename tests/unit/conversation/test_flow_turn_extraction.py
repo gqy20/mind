@@ -107,7 +107,7 @@ async def test_add_agent_message_to_history(flow_controller, mock_manager):
 
     Given: 智能体和响应内容
     When: 调用 _add_agent_message
-    Then: 消息被格式化并添加到历史
+    Then: 消息被添加到历史（不添加前缀）
     """
     response_content = "这是响应内容"
 
@@ -115,11 +115,10 @@ async def test_add_agent_message_to_history(flow_controller, mock_manager):
         mock_manager.agent_a, response_content, to_memory=True
     )
 
-    # 验证消息被添加
+    # 验证消息被添加（不再添加前缀）
     assert len(mock_manager.messages) == 1
     assert mock_manager.messages[0]["role"] == "assistant"
-    assert "Supporter" in mock_manager.messages[0]["content"]
-    assert "这是响应内容" in mock_manager.messages[0]["content"]
+    assert mock_manager.messages[0]["content"] == "这是响应内容"
 
     # 验证记忆被更新
     mock_manager.memory.add_message.assert_called_once()

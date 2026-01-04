@@ -36,7 +36,7 @@ async def test_process_agent_turn_with_response(flow_controller, mock_manager):
 
     Given: 智能体返回有效响应
     When: 调用 _process_agent_turn
-    Then: 响应被添加到历史，返回输出行
+    Then: 轮次标记和响应被添加到历史，返回输出行
     """
     mock_manager.agent_a.respond = AsyncMock(return_value="这是响应内容")
 
@@ -50,9 +50,15 @@ async def test_process_agent_turn_with_response(flow_controller, mock_manager):
     assert "这是响应内容" in "\n".join(output_lines)
     assert should_end is False
 
-    # 验证消息被添加到历史
-    assert len(mock_manager.messages) == 1
-    assert mock_manager.messages[0]["role"] == "assistant"
+    # 验证消息被添加到历史（轮次标记 + 响应 = 2 条）
+    assert len(mock_manager.messages) == 2
+    # 第一条是轮次标记（mock_manager.turn 初始值是 5，所以是轮次 6）
+    assert mock_manager.messages[0]["role"] == "user"
+    assert "[轮次 6]" in mock_manager.messages[0]["content"]
+    assert "Supporter" in mock_manager.messages[0]["content"]
+    # 第二条是响应
+    assert mock_manager.messages[1]["role"] == "assistant"
+    assert mock_manager.messages[1]["content"] == "这是响应内容"
 
 
 @pytest.mark.asyncio
@@ -61,7 +67,7 @@ async def test_process_agent_turn_interrupted(flow_controller, mock_manager):
 
     Given: 智能体返回 None（被中断）
     When: 调用 _process_agent_turn
-    Then: 返回空列表，不添加消息
+    Then: 返回空列表，轮次标记已添加
     """
     mock_manager.agent_a.respond = AsyncMock(return_value=None)
 
@@ -73,8 +79,10 @@ async def test_process_agent_turn_interrupted(flow_controller, mock_manager):
     assert output_lines == []
     assert should_end is False
 
-    # 验证没有消息被添加
-    assert len(mock_manager.messages) == 0
+    # 验证轮次标记已添加（即使被中断，轮次标记也已添加）
+    assert len(mock_manager.messages) == 1
+    assert mock_manager.messages[0]["role"] == "user"
+    assert "[轮次 6]" in mock_manager.messages[0]["content"]
 
 
 @pytest.mark.asyncio

@@ -146,7 +146,7 @@ class TestConversationManagerMessageFormat:
 
     @pytest.mark.asyncio
     async def test_turn_message_contains_role_prefix(self):
-        """测试：智能体回复的消息应包含 [角色名]: 前缀"""
+        """测试：智能体回复的消息格式（轮次标记 + 无前缀响应）"""
         # Arrange
         agent_a = Agent(name="支持者", system_prompt="你是支持者")
         agent_b = Agent(name="挑战者", system_prompt="你是挑战者")
@@ -157,14 +157,21 @@ class TestConversationManagerMessageFormat:
             # Act
             await manager._turn()
 
-        # Assert - 消息内容应包含角色前缀
-        assert len(manager.messages) == 2
-        assert manager.messages[1]["role"] == "assistant"
-        assert manager.messages[1]["content"] == "[支持者]: 这是支持者的观点"
+        # Assert - 消息格式：初始主题 + 轮次标记 + 响应（不添加前缀）
+        assert len(manager.messages) == 3
+        # messages[0] 是初始主题
+        assert manager.messages[0]["content"] == "主题"
+        # messages[1] 是轮次标记
+        assert manager.messages[1]["role"] == "user"
+        assert "[轮次 1]" in manager.messages[1]["content"]
+        assert "支持者" in manager.messages[1]["content"]
+        # messages[2] 是响应（不添加前缀，由提示词约束保证）
+        assert manager.messages[2]["role"] == "assistant"
+        assert manager.messages[2]["content"] == "这是支持者的观点"
 
     @pytest.mark.asyncio
     async def test_turn_two_agents_different_prefixes(self):
-        """测试：两个智能体应有不同的角色前缀"""
+        """测试：两个智能体应有不同的轮次标记"""
         # Arrange
         agent_a = Agent(name="支持者", system_prompt="你是支持者")
         agent_b = Agent(name="挑战者", system_prompt="你是挑战者")
@@ -177,14 +184,24 @@ class TestConversationManagerMessageFormat:
                 await manager._turn()
                 await manager._turn()
 
-        # Assert - 两条消息应有不同的前缀
-        assert len(manager.messages) == 3
-        assert manager.messages[1]["content"] == "[支持者]: 支持观点"
-        assert manager.messages[2]["content"] == "[挑战者]: 挑战观点"
+        # Assert - 两条消息应有不同的轮次标记（但响应本身不添加前缀）
+        assert len(manager.messages) == 5  # 主题 + 轮次1 + 响应1 + 轮次2 + 响应2
+        # 轮次 1 标记
+        assert manager.messages[1]["role"] == "user"
+        assert "[轮次 1]" in manager.messages[1]["content"]
+        assert "支持者" in manager.messages[1]["content"]
+        # 响应 1（不添加前缀）
+        assert manager.messages[2]["content"] == "支持观点"
+        # 轮次 2 标记
+        assert manager.messages[3]["role"] == "user"
+        assert "[轮次 2]" in manager.messages[3]["content"]
+        assert "挑战者" in manager.messages[3]["content"]
+        # 响应 2（不添加前缀）
+        assert manager.messages[4]["content"] == "挑战观点"
 
     @pytest.mark.asyncio
     async def test_turn_preserves_agent_response_as_is(self):
-        """测试：代码不再清理 AI 响应中的前缀，由提示词约束保证输出格式"""
+        """测试：响应原样保留，不添加前缀"""
         # Arrange
         agent_a = Agent(name="支持者", system_prompt="你是支持者")
         agent_b = Agent(name="挑战者", system_prompt="你是挑战者")
@@ -196,9 +213,9 @@ class TestConversationManagerMessageFormat:
             # Act
             await manager._turn()
 
-        # Assert - 响应原样保留，由提示词约束保证 AI 不添加前缀
-        assert len(manager.messages) == 2
-        assert manager.messages[1]["content"] == "[支持者]: 这是观点"
+        # Assert - 响应原样保留，不添加前缀，由提示词约束保证 AI 不添加前缀
+        assert len(manager.messages) == 3
+        assert manager.messages[2]["content"] == "这是观点"
 
 
 class TestConversationManagerTurn:
@@ -246,7 +263,7 @@ class TestConversationManagerTurn:
 
     @pytest.mark.asyncio
     async def test_turn_interrupted_returns_none_no_message_added(self):
-        """测试：被中断时不添加消息"""
+        """测试：被中断时轮次标记已添加，但响应消息未添加"""
         # Arrange
         agent_a = Agent(name="A", system_prompt="你是A")
         agent_b = Agent(name="B", system_prompt="你是B")
@@ -260,8 +277,11 @@ class TestConversationManagerTurn:
             # Act
             await manager._turn()
 
-            # Assert
-            assert len(manager.messages) == initial_count  # 没有添加新消息
+            # Assert - 轮次标记已添加，但响应消息未添加
+            assert len(manager.messages) == initial_count + 1
+            # 新增的消息是轮次标记
+            assert manager.messages[-1]["role"] == "user"
+            assert "[轮次 1]" in manager.messages[-1]["content"]
 
 
 class TestConversationManagerAutoExit:

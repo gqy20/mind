@@ -142,8 +142,15 @@ class TestFlowController:
         with patch("builtins.print"):
             await controller._turn()
 
-        # 验证消息被添加
-        assert len(manager.messages) == 1
+        # 验证消息被添加（轮次标记 + 响应 = 2 条）
+        assert len(manager.messages) == 2
+        # 验证轮次标记是第一条消息
+        assert manager.messages[0]["role"] == "user"
+        assert "[轮次 1]" in manager.messages[0]["content"]
+        assert "AgentA" in manager.messages[0]["content"]
+        # 验证响应是第二条消息
+        assert manager.messages[1]["role"] == "assistant"
+        assert manager.messages[1]["content"] == "AI 响应内容"
         # 验证轮次增加
         assert manager.turn == 1
         # 验证切换到下一个智能体

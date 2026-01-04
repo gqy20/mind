@@ -98,13 +98,10 @@ src/mind/
 │   ├── search_tool.py   # 网络搜索工具（duckduckgo）
 │   ├── search_history.py # SearchHistory - 搜索历史持久化
 │   ├── tool_agent.py    # ToolAgent - 工具智能体（代码分析等）
-│   ├── sdk_tool_manager.py  # SDK 工具管理器（MCP 集成）
-│   ├── adapters/        # 工具适配器
-│   │   └── tool_adapter.py  # ToolAdapter - 统一工具调用接口
-│   └── mcp/             # MCP 服务器实现
+│   ├── hooks.py         # ToolHooks - Hook 回调实现
+│   └── mcp/             # MCP 服务器配置
 │       ├── tools.py     # MCP 工具定义
-│       ├── servers.py   # MCP 服务器配置
-│       └── hooks.py     # MCP Hook 系统
+│       └── servers.py   # MCP 服务器配置
 │
 ├── prompts.yaml         # 智能体提示词和系统配置
 ├── config.py            # 配置加载器（Pydantic 模型）
@@ -220,6 +217,13 @@ settings:
   documents: { max_documents, ttl }
   conversation: { turn_interval, max_turns }
   tools: { tool_interval, enable_tools, enable_search }
+  # MCP 服务器配置（可选）
+  mcp_servers:
+    knowledge: { command, args, env }
+    code-analysis: { command, args, env }
+  # Hook 配置（可选）
+  pre_tool_use: { enabled, timeout }
+  post_tool_use: { enabled, timeout }
 ```
 
 **Pydantic 模型**：
@@ -249,16 +253,16 @@ settings:
 - `analyze_codebase(path)`: 代码库分析
 - `read_file_analysis(path, question)`: 文件分析
 
-**SDKToolManager** (`tools/sdk_tool_manager.py`)：
-- MCP 服务器集成（knowledge/code-analysis/web-search）
-- Hook 系统支持
-- 工具权限控制
+**ToolHooks** (`tools/hooks.py`)：
+- `pre_tool_use()`: 工具调用前回调
+- `post_tool_use()`: 工具调用后回调
+- 配合 SDK Hook 系统使用
 
-**ToolAdapter** (`tools/adapters/tool_adapter.py`)：统一工具调用接口
-- 自动在 SDK ToolManager 和原始 ToolAgent 之间选择
-- 错误降级处理（SDK 失败时降级到原始实现）
-- 使用统计和监控
-- 环境变量控制：`MIND_USE_SDK_TOOLS`、`MIND_ENABLE_MCP`
+**SDK 原生集成**（`manager.py:_setup_sdk_tools()`）：
+- 使用 SDK 原生的 `mcp_servers` 和 `hooks` 配置
+- 支持 MCP 服务器配置（`prompts.yaml` 中的 `tools.mcp_servers`）
+- 支持 Hook 配置（`pre_tool_use`、`post_tool_use`）
+- 通过 `ConversationManager._setup_sdk_tools()` 方法初始化
 
 ### 6. 记忆和上下文管理
 
@@ -289,19 +293,25 @@ settings:
 - `ANTHROPIC_API_KEY`: Anthropic API 密钥（必需）
 - `ANTHROPIC_BASE_URL`: API 基础 URL（可选）
 - `ANTHROPIC_MODEL`: 使用的模型（默认: claude-sonnet-4-5-20250929）
-- `MIND_USE_SDK_TOOLS`: 是否使用 SDK 工具管理器（默认: false）
-- `MIND_ENABLE_MCP`: 是否启用 MCP（默认: true）
+
+**MCP 和 Hook 配置**：
+- MCP 服务器和 Hook 通过 `prompts.yaml` 中的 `settings.tools.mcp_servers` 和 `settings.tools.pre_tool_use/post_tool_use` 配置
+- 不再需要环境变量控制，直接在配置文件中定义
 
 ## 交互流程
 
 ```
 用户启动 CLI
     ↓
-加载 prompts.yaml 配置
+加载 prompts.yaml 配置（包括 MCP 服务器和 Hook 配置）
     ↓
 创建两个智能体（支持者 + 挑战者）
     ↓
-创建 ConversationManager（初始化 tools/search_history 和 tools/tool_agent）
+创建 ConversationManager
+    ├─ 初始化 SearchHistory（如果启用搜索）
+    ├─ 初始化 ToolAgent（如果启用工具）
+    ├─ 初始化 SummarizerAgent
+    └─ 调用 _setup_sdk_tools() 设置 SDK 原生集成
     ↓
 用户输入主题
     ↓
@@ -317,7 +327,7 @@ settings:
   │   │   ├─ 处理 content_block_delta（text_delta/citations_delta）
   │   │   ├─ 检测 tool_use 并执行搜索或工具调用
   │   │   │   ├─ search_web: 执行网络搜索（duckduckgo）
-  │   │   │   └─ query_tool: 调用工具扩展（ToolAgent/SDK）
+  │   │   │   └─ query_tool: 调用工具扩展（ToolAgent）
   │   │   └─ 检查 interrupt 标志
   │   ├─ 清理响应前缀
   │   ├─ 记录响应到历史
@@ -359,10 +369,12 @@ settings:
   - `test_citations.py`, `test_progress.py`
 - `tests/unit/tools/test_*.py`: 工具模块测试
   - `test_search_tool.py`, `test_search_history.py`
-  - `test_tool_agent.py`, `test_sdk_tool_manager.py`, `test_tool_adapter.py`
+  - `test_tool_agent.py`
 - `tests/unit/test_*.py`: 顶层模块测试
   - `test_cli.py`, `test_prompts.py`（配置加载测试）
   - `test_conversation*.py`: 对话管理器集成测试
+  - `test_sdk_native_config.py`: SDK 原生配置测试
+  - `test_manager_sdk_tools.py`: SDK 工具管理测试
 
 ## 重要架构细节
 
@@ -371,9 +383,8 @@ settings:
 - **agents/**: 所有智能体相关实现（Agent、ResponseHandler、DocumentPool、ConversationAnalyzer 等）
 - **conversation/**: 对话流程控制（FlowController、各种 Handler、MemoryManager）
 - **display/**: UI 显示功能（引用显示、进度显示）
-- **tools/**: 工具扩展（搜索、搜索历史、代码分析、MCP 集成）
+- **tools/**: 工具扩展（搜索、搜索历史、代码分析、Hook 回调）
 - **顶层模块**: 配置加载、日志等跨领域功能
-- **向后兼容模块**: 项目保留了一些向后兼容的模块（如 `memory.py`、`search_history.py`、`agents/analysis.py`、`agents/citations.py`），这些模块仅用于重导出新位置的符号，便于渐进式迁移
 
 **命名约定**：
 - 模块文件名使用描述性名称（如 `prompt_builder.py` 而非 `prompts.py`）
@@ -396,11 +407,12 @@ settings:
 - `FlowController._clean_response_prefix()`: 清理 AI 响应中的角色名前缀
 - `ConversationEndDetector.clean_response()`: 清理 `<!-- END -->` 标记
 
-### 工具适配器模式
-- `ToolAdapter` 提供统一的工具调用接口
-- 支持在 SDK ToolManager 和原始 ToolAgent 之间自动切换
-- 错误降级：SDK 失败时自动切换到原始实现
-- 环境变量控制：`MIND_USE_SDK_TOOLS`、`MIND_ENABLE_MCP`
+### SDK 原生集成模式
+- 使用 SDK 原生的 `mcp_servers` 和 `hooks` 配置
+- `ConversationManager._setup_sdk_tools()`: 初始化 SDK 工具
+- `ConversationManager._build_hooks_config()`: 构建 Hook 配置
+- MCP 服务器和 Hook 配置在 `prompts.yaml` 中定义
+- ToolHooks (`tools/hooks.py`): 提供 pre/post_tool_use 回调实现
 
 ### Citations API 集成
 - `DocumentPool`: 管理搜索历史文档

@@ -150,6 +150,18 @@ class FlowController:
         output = []
         output.append(f"### [{agent.name}]")
 
+        # 添加轮次标记（用户消息），让大模型知道当前是谁在发言
+        next_turn = self.manager.turn + 1
+        turn_marker = MessageParam(
+            role="user",
+            content=f"[轮次 {next_turn}] 现在由 {agent.name} 发言",
+        )
+        self.manager.messages.append(turn_marker)
+        self.manager.memory.add_message(
+            turn_marker["role"], str(turn_marker["content"])
+        )
+        logger.debug(f"轮次 {next_turn}: 切换到 {agent.name}")
+
         response = await agent.respond(self.manager.messages, self.manager.interrupt)
 
         if response is None:
@@ -166,9 +178,7 @@ class FlowController:
         output.append("")
 
         # 检测对话结束标记
-        end_result = self.manager.end_detector.detect(
-            response, current_turn=self.manager.turn + 1
-        )
+        end_result = self.manager.end_detector.detect(response, current_turn=next_turn)
         if end_result.detected:
             logger.info(f"{agent.name} 请求结束对话（非交互式）")
             output.append("")
@@ -177,9 +187,8 @@ class FlowController:
             output.append("⚠️ AI 请求结束对话")
             return output, True
 
-        # 添加消息到历史
-        formatted_content = f"[{agent.name}]: {response}"
-        msg = MessageParam(role="assistant", content=formatted_content)
+        # 添加消息到历史（不再添加前缀）
+        msg = MessageParam(role="assistant", content=response)
         self.manager.messages.append(msg)
         self.manager.memory.add_message(msg["role"], str(msg["content"]))
         self.manager.turn += 1
@@ -428,13 +437,14 @@ class FlowController:
     def _add_agent_message(self, agent, content: str, to_memory: bool = True) -> None:
         """添加智能体消息到对话历史
 
+        不再添加前缀，避免身份混淆。智能体的身份由系统提示词控制。
+
         Args:
             agent: 智能体实例
             content: 响应内容
             to_memory: 是否添加到记忆
         """
-        formatted_content = f"[{agent.name}]: {content}"
-        msg = MessageParam(role="assistant", content=formatted_content)
+        msg = MessageParam(role="assistant", content=content)
         self.manager.messages.append(msg)
 
         if to_memory:
@@ -450,6 +460,18 @@ class FlowController:
             self.manager.agent_a if self.manager.current == 0 else self.manager.agent_b
         )
 
+        # 添加轮次标记（用户消息），让大模型知道当前是谁在发言
+        next_turn = self.manager.turn + 1
+        turn_marker = MessageParam(
+            role="user",
+            content=f"[轮次 {next_turn}] 现在由 {current_agent.name} 发言",
+        )
+        self.manager.messages.append(turn_marker)
+        self.manager.memory.add_message(
+            turn_marker["role"], str(turn_marker["content"])
+        )
+        logger.debug(f"轮次 {next_turn}: 切换到 {current_agent.name}")
+
         # 检查是否触发搜索
         if self.search_handler.should_trigger_search():
             search_query = self.search_handler.extract_search_query()
@@ -464,8 +486,12 @@ class FlowController:
 
         # 如果未被中断，记录响应
         if response is not None:
-            # 添加消息到历史
-            self._add_agent_message(current_agent, response, to_memory=True)
+            # 添加消息到历史（不再添加前缀）
+            msg = MessageParam(role="assistant", content=response)
+            self.manager.messages.append(msg)
+            self.manager.memory.add_message(msg["role"], str(msg["content"]))
+
+            self.manager.turn += 1
 
             # 显示 token 进度（每轮显示）
             ProgressDisplay.show_token_progress(
@@ -476,7 +502,7 @@ class FlowController:
 
             # 检测对话结束标记
             end_result = self.manager.end_detector.detect(
-                response, current_turn=self.manager.turn + 1
+                response, current_turn=self.manager.turn
             )
             if end_result.detected:
                 logger.info(f"{current_agent.name} 请求结束对话")
@@ -488,7 +514,9 @@ class FlowController:
             if status == "red":
                 await self._handle_memory_trim()
         else:
-            logger.debug(f"轮次 {self.manager.turn}: {current_agent.name} 响应被中断")
+            logger.debug(
+                f"轮次 {self.manager.turn + 1}: {current_agent.name} 响应被中断"
+            )
 
         # 切换到下一个智能体
         self.manager.current = 1 - self.manager.current
