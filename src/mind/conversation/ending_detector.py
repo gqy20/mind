@@ -34,7 +34,7 @@ class ConversationEndConfig:
 
     # 检测结束前所需的最小轮数
     # 防止对话过早结束，确保双方充分交流
-    min_turns_before_end: int = 20
+    min_turns_before_end: int = 10
 
     # ========== 智能分析检测配置（默认启用） ==========
 
@@ -42,7 +42,7 @@ class ConversationEndConfig:
     enable_analysis_detection: bool = True
 
     # 智能检测的最小轮数
-    analysis_min_turns: int = 20
+    analysis_min_turns: int = 10
 
     # 最小响应长度（字符数）
     analysis_min_response_length: int = 30
@@ -50,14 +50,27 @@ class ConversationEndConfig:
     # 检查最近几轮的响应（用于循环检测）
     analysis_check_turns: int = 5
 
+    # ========== 过渡机制配置 ==========
+
+    # 检测到结束后需要的过渡轮数（0 表示立即结束）
+    transition_turns: int = 2
+
 
 @dataclass
 class EndDetectionResult:
-    """结束检测结果"""
+    """结束检测结果
+
+    Attributes:
+        detected: 是否检测到结束信号
+        method: 检测方法 ("marker", "analysis", "marker_verified")
+        reason: 检测原因说明
+        transition: 需要的过渡轮数（0 表示立即结束，>0 表示需要过渡对话）
+    """
 
     detected: bool
     method: str = "marker"  # "marker" 或 "analysis"
     reason: str = "检测到显式结束标记"
+    transition: int = 0  # 默认 0，表示立即结束
 
 
 @dataclass
@@ -141,12 +154,13 @@ class ConversationEndDetector:
                 if self.config.enable_analysis_detection and messages is not None:
                     analysis_result = self._detect_by_analysis(messages, current_turn)
                     if analysis_result.detected:
-                        # 智能分析认为应该结束
-                        logger.info("智能分析验证通过，接受显式结束标记")
+                        # 智能分析认为应该结束，返回带过渡轮数的结果
+                        logger.info("智能分析验证通过，接受显式结束标记，进入过渡期")
                         return EndDetectionResult(
                             detected=True,
                             method="marker_verified",
                             reason=f"显式标记 + {analysis_result.reason}",
+                            transition=self.config.transition_turns,
                         )
                     else:
                         # 智能分析认为不应该结束，忽略显式标记
@@ -208,11 +222,12 @@ class ConversationEndDetector:
         # 4. 检测对话循环
         loop_detected = self._detect_conversation_loop()
         if loop_detected:
-            logger.info("智能检测: 检测到对话循环")
+            logger.info("智能检测: 检测到对话循环，进入过渡期")
             return EndDetectionResult(
                 detected=True,
                 method="analysis",
                 reason="检测到对话循环（响应重复）",
+                transition=self.config.transition_turns,
             )
 
         # 未满足结束条件

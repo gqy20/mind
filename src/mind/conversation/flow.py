@@ -457,6 +457,15 @@ class FlowController:
 
     async def _turn(self):
         """执行一轮对话"""
+        # ========== 处理过渡期 ==========
+        # 如果在过渡期，减少计数
+        if self.manager.pending_end_count > 0:
+            self.manager.pending_end_count -= 1
+            logger.debug(
+                f"过渡期剩余轮数: {self.manager.pending_end_count}/"
+                f"{self.manager.end_detector.config.transition_turns}"
+            )
+
         # 确定当前发言的智能体
         current_agent = (
             self.manager.agent_a if self.manager.current == 0 else self.manager.agent_b
@@ -507,9 +516,26 @@ class FlowController:
                 response, current_turn=self.manager.turn, messages=self.manager.messages
             )
             if end_result.detected:
-                logger.info(f"{current_agent.name} 请求结束对话")
-                await self.ending_handler.handle_proposal(current_agent.name, response)
-                return  # 结束本轮
+                if end_result.transition > 0:
+                    # 需要过渡轮数
+                    self.manager.pending_end_count = end_result.transition
+                    # 设置过渡激活标记（用于检测过渡期结束）
+                    self.manager._pending_end_active = True
+                    logger.info(
+                        f"{current_agent.name} 请求结束对话，"
+                        f"进入过渡期（{end_result.transition} 轮）"
+                    )
+                    console.print(
+                        f"\n📢 [系统] {current_agent.name} 建议结束对话，"
+                        f"将进行 {end_result.transition} 轮过渡对话..."
+                    )
+                else:
+                    # 立即结束（兼容旧行为）
+                    logger.info(f"{current_agent.name} 请求结束对话")
+                    await self.ending_handler.handle_proposal(
+                        current_agent.name, response
+                    )
+                    return  # 结束本轮
 
             # 检查记忆状态
             status = self.manager.memory.get_status()
@@ -522,6 +548,44 @@ class FlowController:
 
         # 切换到下一个智能体
         self.manager.current = 1 - self.manager.current
+
+        # ========== 检查过渡期是否结束 ==========
+        # 如果 pending_end_count == 0 且之前设置了过渡（通过检查是否被确认标记）
+        # 我们需要在过渡期结束后真正结束对话
+        if (
+            self.manager.pending_end_count == 0
+            and hasattr(self.manager, "_pending_end_active")
+            and self.manager._pending_end_active
+        ):
+            # 过渡期结束，真正结束对话
+            logger.info("过渡期结束，准备结束对话")
+            # 这里会在主循环中被处理，因为 is_running 会被设置
+            await self._handle_transition_end()
+
+    async def _handle_transition_end(self):
+        """处理过渡期结束
+
+        非交互模式：直接结束
+        交互模式：提示用户确认
+        """
+        # 清除过渡标记
+        if hasattr(self.manager, "_pending_end_active"):
+            self.manager._pending_end_active = False
+
+        # 非交互模式：直接通过 ending_handler 处理
+        if not hasattr(self, "_is_interactive") or not self._is_interactive:
+            # 生成总结
+            summary = await self.manager._summarize_conversation()
+            self.manager.summary = summary
+            # 保存对话
+            self.manager.save_conversation()
+            # 设置结束标志
+            self.manager.is_running = False
+        else:
+            # 交互模式：提示用户确认
+            console.print("\n📢 [系统] 过渡期结束，是否确认结束对话？")
+            console.print("  按 Enter 确认结束，或输入其他内容继续对话")
+            # 这里会在 input_mode 中被处理
 
     async def should_trigger_search(self, last_response: str | None = None) -> bool:
         """判断是否应该触发搜索（委托给 SearchHandler）"""

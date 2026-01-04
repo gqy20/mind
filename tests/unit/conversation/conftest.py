@@ -41,6 +41,10 @@ def mock_manager():
     manager.interrupt.is_set = MagicMock(return_value=False)
     manager.end_detector = MagicMock()
     manager.end_detector.detect = MagicMock(return_value=MagicMock(detected=False))
+    # 过渡机制状态
+    manager.pending_end_count = 0
+    manager.pending_end_confirmed = False
+    manager._pending_end_active = False
     return manager
 
 

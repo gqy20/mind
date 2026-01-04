@@ -92,6 +92,13 @@ class ConversationManager:
     end_detector: ConversationEndDetector = field(
         default_factory=lambda: ConversationEndDetector(ConversationEndConfig())
     )
+    # ========== 两轮过渡机制状态 ==========
+    # 剩余过渡轮数（0 表示不在过渡期）
+    pending_end_count: int = 0
+    # 用户是否确认结束（交互模式）
+    pending_end_confirmed: bool = False
+    # 过渡期是否激活（用于检测过渡期结束）
+    _pending_end_active: bool = False
     # 总结智能体（专门用于总结对话）
     summarizer_agent: "SummarizerAgent | None" = field(default=None)
     # 流程控制器（延迟初始化）

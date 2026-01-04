@@ -118,6 +118,9 @@ class TestFlowController:
         manager.search_interval = 0
         manager.is_running = True
         manager.interrupt = asyncio.Event()
+        # 过渡机制状态
+        manager.pending_end_count = 0
+        manager._pending_end_active = False
 
         # 模拟 agent respond
         async def mock_respond(messages, interrupt):
@@ -177,6 +180,9 @@ class TestFlowController:
         manager.search_interval = 0
         manager.is_running = True
         manager.interrupt = asyncio.Event()
+        # 过渡机制状态
+        manager.pending_end_count = 0
+        manager._pending_end_active = False
 
         # 模拟 agent respond
         async def mock_respond(messages, interrupt):
@@ -184,10 +190,11 @@ class TestFlowController:
 
         manager.agent_a.respond = mock_respond
 
-        # 模拟 end_detector 检测到结束
+        # 模拟 end_detector 检测到结束（无过渡，立即结束）
         manager.end_detector = MagicMock()
         end_result = MagicMock()
         end_result.detected = True
+        end_result.transition = 0  # 立即结束
         manager.end_detector.detect = MagicMock(return_value=end_result)
 
         # 模拟 _summarize_conversation

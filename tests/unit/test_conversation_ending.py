@@ -5,6 +5,7 @@ Unit tests for Conversation Ending Detection (Redesigned)
 - 显式标记检测（简单、可靠）
 - 响应清理
 - 结束提议管理
+- 两轮过渡机制
 - 集成测试
 """
 
@@ -13,6 +14,7 @@ import pytest
 from mind.conversation.ending_detector import (
     ConversationEndConfig,
     ConversationEndDetector,
+    EndDetectionResult,
     EndProposal,
 )
 
@@ -21,7 +23,7 @@ class TestConversationEndConfig:
     """测试对话结束配置类"""
 
     def test_default_config(self):
-        """测试：默认配置值（智能分析已启用）"""
+        """测试：默认配置值（智能分析已启用，最小轮数 10）"""
         # Arrange & Act
         config = ConversationEndConfig()
 
@@ -29,7 +31,7 @@ class TestConversationEndConfig:
         assert config.enable_detection is True
         assert config.end_marker == "<!-- END -->"
         assert config.enable_analysis_detection is True  # 默认启用
-        assert config.min_turns_before_end == 20
+        assert config.min_turns_before_end == 10  # 修改为 10
 
     def test_analysis_detection_enabled_by_default(self):
         """测试：智能分析检测默认启用"""
@@ -38,7 +40,7 @@ class TestConversationEndConfig:
 
         # Assert - 智能分析相关配置的默认值
         assert config.enable_analysis_detection is True
-        assert config.analysis_min_turns == 20
+        assert config.analysis_min_turns == 10  # 修改为 10
         assert config.analysis_min_response_length == 30
         assert config.analysis_check_turns == 5
 
@@ -582,3 +584,35 @@ class TestIntegration:
 
         # Assert
         assert result.detected == expected_detected
+
+
+class TestTransitionMechanism:
+    """测试两轮过渡机制
+
+    新机制：检测到结束时，先进行两轮过渡对话，然后真正结束。
+    """
+
+    def test_end_detection_result_supports_transition(self):
+        """测试：EndDetectionResult 支持 transition 字段"""
+        # Arrange & Act
+        result = EndDetectionResult(
+            detected=True,
+            method="marker_verified",
+            reason="检测到循环",
+            transition=2,  # 需要两轮过渡
+        )
+
+        # Assert
+        assert result.detected is True
+        assert result.transition == 2
+        assert result.method == "marker_verified"
+
+    def test_end_detection_result_without_transition(self):
+        """测试：EndDetectionResult 可以没有 transition（向后兼容）"""
+        # Arrange & Act
+        result = EndDetectionResult(detected=False)
+
+        # Assert
+        assert result.detected is False
+        # transition 应该默认为 None 或 0
+        assert result.transition == 0
