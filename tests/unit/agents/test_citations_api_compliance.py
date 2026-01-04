@@ -4,7 +4,7 @@
 参考：https://platform.claude.com/docs/en/api/messages
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,9 +24,11 @@ async def test_citations_delta_event_has_single_citation():
     }
     """
     from mind.agents.client import AnthropicClient
+    from mind.agents.response import ResponseHandler
 
-    # 创建 mock 客户端
+    # 创建 mock 客户端和 handler
     mock_client = AnthropicClient(model="claude-sonnet-4-5-20250929")
+    handler = ResponseHandler(mock_client)
 
     # 模拟 citations_delta 事件（使用官方规范格式）
     mock_event = MagicMock()
@@ -41,47 +43,17 @@ async def test_citations_delta_event_has_single_citation():
         end_char_index=20,
     )
 
-    # 模拟流式响应
-    async def mock_stream(*args, **kwargs):
-        yield mock_event
-        # 生成一个结束事件
-        stop_event = MagicMock()
-        stop_event.type = "content_block_stop"
-        stop_event.content_block = MagicMock(type="text")
-        yield stop_event
+    # 直接调用 _handle_content_block_delta
+    response_text = ""
+    _, _, citations_buffer = handler._handle_content_block_delta(
+        mock_event, response_text, False
+    )
 
-    with patch.object(mock_client.client.beta.messages, "stream") as mock_stream_method:
-        mock_stream_method.return_value.__aenter__.return_value = mock_stream
-
-        # 执行并验证
-        citations_buffer = []
-        async for event in mock_client.stream(
-            messages=[{"role": "user", "content": "test"}],
-            system="test",
-        ):
-            if event.type == "content_block_delta":
-                if event.delta.type == "citations_delta":
-                    # 官方规范：使用 event.delta.citation（单数）
-                    assert hasattr(event.delta, "citation"), (
-                        "citations_delta 事件应包含 citation（单数）字段"
-                    )
-                    citation = event.delta.citation
-                    citations_buffer.append(
-                        {
-                            "type": getattr(citation, "type", "unknown"),
-                            "document_title": getattr(
-                                citation, "document_title", "未知来源"
-                            ),
-                            "cited_text": getattr(citation, "cited_text", ""),
-                            "document_index": getattr(citation, "document_index", 0),
-                        }
-                    )
-
-        # 验证捕获的引用数据
-        assert len(citations_buffer) == 1
-        assert citations_buffer[0]["document_title"] == "测试文档"
-        assert citations_buffer[0]["cited_text"] == "测试引用文本"
-        assert citations_buffer[0]["document_index"] == 0
+    # 验证捕获的引用数据
+    assert len(citations_buffer) == 1
+    assert citations_buffer[0]["document_title"] == "测试文档"
+    assert citations_buffer[0]["cited_text"] == "测试引用文本"
+    assert citations_buffer[0]["document_index"] == 0
 
 
 @pytest.mark.asyncio
@@ -177,26 +149,25 @@ async def test_citations_include_all_required_fields():
     assert citation["document_index"] == 1
 
 
-def test_current_implementation_issues():
-    """通过代码检查验证当前实现的问题
-
-    这个测试不需要运行，用于记录当前实现与规范的差异。
-    """
+def test_current_implementation_complies_with_spec():
+    """通过代码检查验证当前实现符合官方规范"""
     import inspect
 
     from mind.agents.response import ResponseHandler
 
     source = inspect.getsource(ResponseHandler._handle_content_block_delta)
 
-    # 问题 1：当前使用 citations（复数），应该使用 citation（单数）
-    assert "event.delta.citations" in source, (
-        "❌ 当前实现使用 event.delta.citations（复数）"
-        "\n✅ 官方规范要求 event.delta.citation（单数）"
+    # ✅ 验证：应该使用 citation（单数）
+    assert "event.delta.citation" in source, (
+        "✅ 实现应该使用 event.delta.citation（单数）符合官方规范"
     )
 
-    # 问题 2：缺少 document_index 字段
-    assert "document_index" not in source, (
-        "❌ 当前实现缺少 document_index 字段\n✅ 官方规范要求包含 document_index"
+    # ✅ 验证：应该包含 document_index 字段
+    assert "document_index" in source, "✅ 实现应该包含 document_index 字段符合官方规范"
+
+    # ✅ 验证：应该有官方规范参考链接
+    assert "platform.claude.com/docs/en/api/messages" in source, (
+        "✅ 代码应该参考官方文档"
     )
 
 
