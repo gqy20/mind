@@ -147,7 +147,7 @@ jobs:
       - name: Upload conversation as artifact
         id: upload_artifact
         if: steps.check_chat.outputs.is_chat == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: conversation-${{ steps.get_issue.outputs.number }}-${{ github.run_number }}
           path: history/*.json
